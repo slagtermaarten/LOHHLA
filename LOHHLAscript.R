@@ -1019,7 +1019,8 @@ for (region in regions) {
         HLA_A_type1normal$V4 <- as.numeric(HLA_A_type1normal$V4)
       }
       rownames(HLA_A_type1normal) <- HLA_A_type1normal$V2
-      HLA_A_type1tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type1,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      tumpile <- paste0(workDir, "/",region,".",HLA_A_type1,".","tumor.mpileup")
+      HLA_A_type1tumor  <- read.table(tumpile,sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE,col.names=paste0("V",c(1:6)))
       rownames(HLA_A_type1tumor) <- HLA_A_type1tumor$V2
 
       #apply minimum coverage thresholds (we only apply this to the normal for now)
@@ -1047,7 +1048,7 @@ for (region in regions) {
         HLA_A_type2normal$V4 <- as.numeric(HLA_A_type2normal$V4)
       }
       rownames(HLA_A_type2normal) <- HLA_A_type2normal$V2
-      HLA_A_type2tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type2,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      HLA_A_type2tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type2,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE,col.names=paste0("V",c(1:6)))
       rownames(HLA_A_type2tumor) <- HLA_A_type2tumor$V2
 
       #apply minimum coverage thresholds (we only apply this to the normal for now)
