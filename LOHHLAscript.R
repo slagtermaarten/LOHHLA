@@ -188,7 +188,7 @@ if (CopyNumLoc == 'FALSE') {
   performIntegerCopyNum <- FALSE
   useLogRbin            <- FALSE
 }
-override                <- ifelse(overrideDir == TRUE, yes = FALSE, no = TRUE)
+override                <- ifelse(overrideDir == "TRUE", yes = FALSE, no = TRUE)
 gamma                   <- 1
 binSize                 <- 150
 
