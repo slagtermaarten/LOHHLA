@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # before running
 # ml BEDTools/2.26.0-foss-2016b
 # ml SAMtools/1.3.1-foss-2016b
@@ -48,7 +49,7 @@ if (!interactive()) {
                 help="remove temporary files [default= %default]", metavar="character"),
     make_option(c("-no", "--novoDir"), type="character", default='',
                 help="path to novoalign executable [default= %default]", metavar="character"),
-    make_option(c("-na", "--novoThreads"), type="integer", default=as.integer(system('nproc', intern = T)),
+    make_option(c("-na", "--novoThreads"), type="integer", default=min(as.integer(system('nproc', intern = T)), 8),
                 help="amount of threads to be used by novoalign [default= %default]", metavar="character"),
     make_option(c("-ga", "--gatkDir"), type="character", default='',
                 help="path to GATK executable [default= %default]", metavar="character"),
@@ -135,7 +136,7 @@ numMisMatch       <- opt$numMisMatch
 mapping.step      <- opt$mappingStep
 cleanUp           <- opt$cleanUp
 NOVODir           <- opt$novoDir
-NOVOThreads       <- opt$NOVOThreads
+NOVOThreads       <- opt$novoThreads
 GATKDir           <- opt$gatkDir
 HLAexonLoc        <- opt$HLAexonLoc
 kmerSize          <- opt$kmerSize
@@ -187,7 +188,7 @@ if (CopyNumLoc == 'FALSE') {
   performIntegerCopyNum <- FALSE
   useLogRbin            <- FALSE
 }
-override                <- overrideDir == TRUE, yes = FALSE, no = TRUE)
+override                <- ifelse(overrideDir == TRUE, yes = FALSE, no = TRUE)
 gamma                   <- 1
 binSize                 <- 150
 
