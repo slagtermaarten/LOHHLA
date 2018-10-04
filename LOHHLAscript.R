@@ -6,70 +6,125 @@
 # ml TracerX-Picard-GATK/0.1-Java-1.7.0_80
 # ml Jellyfish/2.2.6-foss-2016b
 
-library(optparse)
-option_list = list(
-  make_option(c("-id", "--patientId"), type="character", default=NULL, 
-              help="patient ID", metavar="character"),
-  make_option(c("-o", "--outputDir"), type="character", default=NULL, 
-              help="location of output directory", metavar="character"),
-  make_option(c("-nBAM", "--normalBAMfile"), type="character", default=NULL, 
-              help="normal BAM file\n\t\tcan be FALSE to run without normal sample", metavar="character"),
-  make_option(c("-BAM", "--BAMDir"), type="character", default=NULL, 
-              help="location of all BAMs to test", metavar="character"),
-  make_option(c("-hla", "--hlaPath"), type="character", default=NULL, 
-              help="location to patient HLA calls", metavar="character"),
-  make_option(c("-hlaLoc", "--HLAfastaLoc"), type="character", default='~/lohhla/data/hla_all.fasta', 
-              help="location of HLA FASTA [default= %default]", metavar="character"),
-  make_option(c("-cn", "--CopyNumLoc"), type="character", default="FALSE", 
-              help="location to patient purity and ploidy output\n\t\tcan be FALSE to only estimate allelic imbalance", metavar="character"),
-  make_option(c("-ov", "--overrideDir"), type="character", default='FALSE', 
-              help="location of flagstat information if already run [default= %default]", metavar="character"),
-  make_option(c("-mc", "--minCoverageFilter"), type="numeric", default=30,
-              help="minimum coverage at mismatch site [default= %default]", metavar="character"),
-  make_option(c("-kmer", "--kmerSize"), type="numeric", default=50, 
-              help="size of kmers to fish with [default= %default]", metavar="character"),
-  make_option(c("-mm", "--numMisMatch"), type="numeric", default=1, 
-              help="number of mismatches allowed in read to map to HLA allele [default= %default]", metavar="character"),
-  make_option(c("-ms", "--mappingStep"), type="logical", default=TRUE, 
-              help="does mapping to HLA alleles need to be done [default= %default]", metavar="character"),
-  make_option(c("-fs", "--fishingStep"), type="logical", default=TRUE, 
-              help="if mapping is performed, also look for fished reads matching kmers of size kmerSize [default= %default]", metavar="character"),
-  make_option(c("-ps", "--plottingStep"), type="logical", default=TRUE, 
-              help="are plots made [default= %default]", metavar="character"),
-  make_option(c("-cs", "--coverageStep"), type="logical", default=TRUE, 
-              help="are coverage differences analyzed [default= %default]", metavar="character"),
-  make_option(c("-cu", "--cleanUp"), type="logical", default=TRUE, 
-              help="remove temporary files [default= %default]", metavar="character"),
-  make_option(c("-no", "--novoDir"), type="character", default='', 
-              help="path to novoalign executable [default= %default]", metavar="character"),
-  make_option(c("-ga", "--gatkDir"), type="character", default='', 
-              help="path to GATK executable [default= %default]", metavar="character"),
-  make_option(c("-ex", "--HLAexonLoc"), type="character", default='~/lohhla/data/hla.dat', 
-              help="HLA exon boundaries for plotting [default= %default]", metavar="character"),
-  make_option(c("-w", "--ignoreWarnings"), type="logical", default=TRUE, 
-              help="continue running with warnings [default= %default]", metavar="character")
-)
+## Test whether run via Rscript
+if (!interactive()) {
+  library(optparse)
+  option_list = list(
+    make_option(c("-id", "--patientId"), type="character", default=NULL,
+                help="patient ID", metavar="character"),
+    make_option(c("-o", "--outputDir"), type="character", default=NULL,
+                help="location of output directory", metavar="character"),
+    make_option(c("-tBAM", "--tumorBAMfile"), type="character", default=NULL,
+                help="tumor BAM file", metavar="character"),
+    make_option(c("-nBAM", "--normalBAMfile"), type="character", default=NULL,
+                help="normal BAM file\n\t\tcan be FALSE to run without normal sample", metavar="character"),
+    make_option(c("-BAM", "--BAMDir"), type="character", default=NULL,
+                help="location of all BAMs to test", metavar="character"),
+    make_option(c("-hla", "--hlaPath"), type="character", default=NULL,
+                help="location to patient HLA calls", metavar="character"),
+    make_option(c("-hlaLoc", "--HLAfastaLoc"), type="character", 
+                  default='~/lohhla/data/hla_all.fasta',
+                  help="location of HLA FASTA [default= %default]", 
+                  metavar="character"),
+    make_option(c("-cn", "--CopyNumLoc"), type="character", default="FALSE",
+                help="location to patient purity and ploidy output\n\t\tcan be FALSE to only estimate allelic imbalance", metavar="character"),
+    make_option(c("-ov", "--overrideDir"), type="character", default='FALSE',
+                help="location of flagstat information if already run [default= %default]", metavar="character"),
+    make_option(c("-mc", "--minCoverageFilter"), type="numeric", default=30,
+                help="minimum coverage at mismatch site [default= %default]", metavar="character"),
+    make_option(c("-kmer", "--kmerSize"), type="numeric", default=50,
+                help="size of kmers to fish with [default= %default]", metavar="character"),
+    make_option(c("-mm", "--numMisMatch"), type="numeric", default=1,
+                help="number of mismatches allowed in read to map to HLA allele [default= %default]", metavar="character"),
+    make_option(c("-ms", "--mappingStep"), type="logical", default=TRUE,
+                help="does mapping to HLA alleles need to be done [default= %default]", metavar="character"),
+    make_option(c("-fs", "--fishingStep"), type="logical", default=TRUE,
+                help="if mapping is performed, also look for fished reads matching kmers of size kmerSize [default= %default]", metavar="character"),
+    make_option(c("-ps", "--plottingStep"), type="logical", default=TRUE,
+                help="are plots made [default= %default]", metavar="character"),
+    make_option(c("-cs", "--coverageStep"), type="logical", default=TRUE,
+                help="are coverage differences analyzed [default= %default]", metavar="character"),
+    make_option(c("-cu", "--cleanUp"), type="logical", default=TRUE,
+                help="remove temporary files [default= %default]", metavar="character"),
+    make_option(c("-no", "--novoDir"), type="character", default='',
+                help="path to novoalign executable [default= %default]", metavar="character"),
+    make_option(c("-na", "--novoThreads"), type="integer", default=as.integer(system('nproc', intern = T)),
+                help="amount of threads to be used by novoalign [default= %default]", metavar="character"),
+    make_option(c("-ga", "--gatkDir"), type="character", default='',
+                help="path to GATK executable [default= %default]", metavar="character"),
+    make_option(c("-ex", "--HLAexonLoc"), type="character", default='~/lohhla/data/hla.dat',
+                help="HLA exon boundaries for plotting [default= %default]", metavar="character"),
+    make_option(c("-w", "--ignoreWarnings"), type="logical", default=TRUE,
+                help="continue running with warnings [default= %default]", metavar="character"),
+    make_option(c("-as", "--genomeAssembly"), type="character", default='grch38',
+                help="specify genome assembly (hg19 or grch38) [default= %default]", metavar="character"),
+    make_option(c("-jl", "--jellyFish"), type="character", default='jellyfish',
+                help="specify location of jellyfish binary", metavar="character"),
+    make_option(c("-st", "--samtools"), type="character", default='samtools',
+                help="specify location of samtools binary", metavar="character")
+  )
+  opt_parser <- OptionParser(option_list=option_list)
+  opt <- parse_args(opt_parser)
+  # strip trailing / from all parameters in opt
+  for (i in 1:length(opt)) {
+    if (substr(opt[i], nchar(opt[i]), nchar(opt[i])) == '/') {
+      opt[i] <- substr(opt[i], 1, nchar(opt[i]) - 1)
+    }
+  }
+  print(opt)
+} else {
+  ## Empty list, read in variables from environment
+  opt <- list()
+}
 
 
-opt_parser <- OptionParser(option_list=option_list)
-opt <- parse_args(opt_parser)
-
-# strip trailing / from all parameters in opt
-for(i in 1:length(opt)){
-  if(substr(opt[i], nchar(opt[i]), nchar(opt[i])) == '/'){
-    opt[i] <- substr(opt[i], 1, nchar(opt[i])-1)
+#' Check command line argument; set default value if null
+#'
+#'
+`%a%` <- function(a, default) {
+  # var_name <- deparse(substitute(a, env = parent.frame(2)))
+  var_name <- deparse(substitute(a))
+  # print(var_name)
+  if (!exists(var_name) || is.null(a)) {
+    return(default)
+  } else {
+    return(a)
   }
 }
 
-print(opt)
+
+#' Set default value if null
+#'
+#'
+`%||%` <- function(a, default) {
+  if (is.null(a)) {
+    return(default)
+  } else {
+    return(a)
+  }
+}
 
 ##########################
 # Command line arguments #
 ##########################
-
+# Check if variables are already defined in current environment. 
+# Replace undefined ones with command line arguments or defaults
 full.patient      <- opt$patientId
 workDir           <- opt$outputDir
+outputDir         <- workDir
 normalBAMfile     <- opt$normalBAMfile
+tumorBAMfile      <- opt$tumorBAMfile
+# example of invalid file name (as in LOHHLA code cannot handle this currently)
+# grepl('^.+\\..+\\.bam$', "normal_hla_loci.sorted.bam")
+# test for valid file name
+## Some input checking
+if (grepl('^.+\\..+\\.bam$', basename(normalBAMfile)) ||
+    grepl('^.+\\..+\\.bam$', basename(tumorBAMfile))) {
+  stop('LOHHLA assumes absence of dots in bam filenames, please change names')
+}
+# if (grepl('hla|HLA', basename(normalBAMfile))) {
+#   warning('LOHHLA cannot handle the word "hla" filenames, proceed at own risk')
+# }
 BAMDir            <- opt$BAMDir
 hlaPath           <- opt$hlaPath
 HLAfastaLoc       <- opt$HLAfastaLoc
@@ -80,6 +135,7 @@ numMisMatch       <- opt$numMisMatch
 mapping.step      <- opt$mappingStep
 cleanUp           <- opt$cleanUp
 NOVODir           <- opt$novoDir
+NOVOThreads       <- opt$NOVOThreads
 GATKDir           <- opt$gatkDir
 HLAexonLoc        <- opt$HLAexonLoc
 kmerSize          <- opt$kmerSize
@@ -87,17 +143,16 @@ fishing.step      <- opt$fishingStep
 coverageStep      <- opt$coverageStep
 plottingStep      <- opt$plottingStep
 ignoreWarnings    <- opt$ignoreWarnings
-
-#print(coverageStep)
-#print(plottingStep)
-
-if (is.null(opt$BAMDir) | is.null(opt$outputDir) | is.null(opt$hlaPath) | is.null(opt$HLAfastaLoc)){
-  print_help(opt_parser)
-  stop("Missing arguments.\n", call.=FALSE)  
+genomeAssembly    <- tolower(opt$genomeAssembly)
+jellyfish         <- opt$jellyFish
+samtools          <- opt$samtools
+if (is.null(BAMDir) || is.null(outputDir) ||
+    is.null(normalBAMfile) ||
+    is.null(tumorBAMfile) ||
+    is.null(hlaPath) || is.null(HLAfastaLoc)) {
+  if (interactive()) print_help(opt_parser)
+  stop("Missing arguments.\n", call.=FALSE)
 }
-
-
-
 
 #############
 # libraries #
@@ -108,76 +163,37 @@ require(Biostrings, quietly = TRUE)
 require(beeswarm, quietly = TRUE)
 require(zoo, quietly = TRUE)
 require(Rsamtools, quietly = TRUE)
-
-
+require(dplyr, quietly = T)
+require(naturalsort, quietly = T)
 
 ###########
 # inputs #
 ###########
 
-interactive           <- FALSE
-if(interactive)
-{
-  # if you wish to run script interactively, then alter parameters below
-  opt<-parse_args(opt_parser,c('--patientId', 'G_K107'
-                               , '--outputDir', '/camp/lab/swantonc/working/mcgrann/projects/LOHproject/kidney_run/G_K107_full/'
-                               , '--normalBAMfile', '/camp/project/tracerX/working/CRENAL/OUTPUT/G_K107/Rabbit_Hole_Exome/MERGED/DE_DUPED/N1d1ex1.bam'
-                               , '--BAMDir', '/camp/project/tracerX/working/CRENAL/OUTPUT/G_K107/Rabbit_Hole_Exome/MERGED/DE_DUPED/'
-                               , '--hlaPath', '/camp/project/tracerX/working/CRENAL/OUTPUT/G_K107/Rabbit_Hole_Exome/MERGED/POLYSOLVER/HLA_Type/winners.hla.txt'
-                               , '--HLAfastaLoc', '/farm/home/lr-tct-lif/wilson52/installs/polysolver/data/abc_complete.fasta'
-                               , '--CopyNumLoc', '/camp/lab/swantonc/working/mcgrann/projects/LOHproject/kidney_run/G_K107/copyNumSolutions.txt'
-                               , '--mappingStep', 'TRUE'
-                               , '--cleanUp', 'TRUE'
-                               , '--overrideDir', '/camp/lab/swantonc/working/mcgrann/projects/LOHproject/kidney_run/G_K107/flagstat/'
-                               , '--gatkDir', '/camp/apps/eb/software/TracerX-Picard-GATK/0.1-Java-1.7.0_80/bin/'
-                               , '--novoDir', '/camp/apps/eb/software/novoalign/3.07.00/bin/'))
-
-  opt<-parse_args(opt_parser,c('--patientId', 'G_K107'
-                               , '--outputDir', '/camp/lab/swantonc/working/rosentr/projects/PolySolverLOH/test/test-renal/G_K107-v2/'
-                               , '--normalBAMfile', '/camp/lab/swantonc/working/rosentr/projects/PolySolverLOH/test/test-renal/G_K107-v2/BAMs/B1d1xx1.bam'
-                               , '--BAMDir', '/camp/lab/swantonc/working/rosentr/projects/PolySolverLOH/test/test-renal/G_K107-v2/BAMs/'
-                               , '--hlaPath', '/camp/project/tracerX/working/CRENAL/OUTPUT/G_K107/Rabbit_Hole_Exome/MERGED/POLYSOLVER/HLA_Type/winners.hla.txt'
-                               , '--HLAfastaLoc', '/farm/home/lr-tct-lif/wilson52/installs/polysolver/data/abc_complete.fasta'
-                               , '--CopyNumLoc', '/camp/lab/swantonc/working/rosentr/projects/PolySolverLOH/test/test-renal/G_K107-v2/copyNumSolutions.txt'
-                               , '--mappingStep', 'TRUE'
-                               , '--cleanUp', 'TRUE'
-                               , '--overrideDir', '/camp/lab/swantonc/working/rosentr/projects/PolySolverLOH/test/test-renal/G_K107-v2/flagstat/'
-                               , '--gatkDir', '/camp/apps/eb/software/TracerX-Picard-GATK/0.1-Java-1.7.0_80/bin/'
-                               , '--novoDir', '/camp/apps/eb/software/novoalign/3.07.00/bin/'))
-  
-}
-
 print(full.patient)
 system('echo ${SLURM_JOBID}')
 
-figureDir <- paste(workDir,"/Figures",sep="")
+figureDir <- paste(outputDir, "/Figures", sep = "")
+log.name  <- paste(outputDir, "/running.hla.loh.exome@", 
+                   gsub(":", "-", gsub(" +", "_", date())), "_log.txt", sep="")
 
-log.name  <- paste(workDir, "/running.hla.loh.exome@", gsub(":", "-", gsub(" +", "_", date())), "_log.txt", sep="")
 
-
-runWithNormal           <- TRUE
-if(normalBAMfile == 'FALSE'){
-  runWithNormal         <- FALSE
-}
-
+runWithNormal           <- normalBAMfile != 'FALSE'
 extractNONmismatchReads <- TRUE
 extractUniqueReads      <- TRUE
-
 performIntegerCopyNum   <- TRUE
 useLogRbin              <- TRUE
-if(CopyNumLoc == 'FALSE'){
+if (CopyNumLoc == 'FALSE') {
   performIntegerCopyNum <- FALSE
   useLogRbin            <- FALSE
 }
-
-override <-  ifelse(overrideDir == FALSE, yes = FALSE, no = TRUE)
-
+override                <- overrideDir == TRUE, yes = FALSE, no = TRUE)
 gamma                   <- 1
 binSize                 <- 150
 
-if(ignoreWarnings){
+if (ignoreWarnings) {
   howToWarn <- warning
-} else{
+} else {
   howToWarn <- stop
 }
 
@@ -185,30 +201,28 @@ if(ignoreWarnings){
 # functions #
 #############
 
-document.params <- function(params, log.name){
-  
+document.params <- function(params, log.name) {
   msg <- "\n#######################\ \n####### Inputs ######## \n#######################\n"
-  
-  for(i in seq_along(params))
-  {
+
+  for(i in seq_along(params)) {
     tmp <- c()
     for(j in 1:length(params[[i]])){
       tmp <- paste(tmp, params[[i]][j], "\t", sep = "")
     }
     msg <- paste(msg, names(params)[i], "\t", tmp, "\n", sep="")
   }
-  
-  write.table(msg, file=log.name, row.names=FALSE, col.names=FALSE, quote=FALSE, append = TRUE)
-  
+
+  write.table(msg, file=log.name, row.names=FALSE, col.names=FALSE,
+              quote=FALSE, append = TRUE)
 }
 
-PasteVector <- function(v,sep=""){
-  
+
+PasteVector <- function(v, sep="") {
   vt <- v[1];
   if(length(v) > 1){
     for(g in 2:length(v)){
       vt <- paste(vt,v[g],sep=sep)
-      
+
     }
   }
   vt <- paste(vt," EnD",sep="");
@@ -217,43 +231,44 @@ PasteVector <- function(v,sep=""){
   out.v <- sub(" , NA","",out.v);
   out.v <- sub(" , NA , "," , ",out.v);
   return(out.v);
-  
 }
 
-create.kmer.file <- function(workDir, kmerSize, HLAfastaLoc){
 
+create.kmer.file <- function(workDir, kmerSize, HLAfastaLoc) {
   setwd(workDir)
-  cmd <- paste('jellyfish count -m ', kmerSize, ' -s 100M -t 5 ', HLAfastaLoc, sep = '')
+  cmd <- paste(jellyfish, ' count -m ', kmerSize, ' -s 100M -t 5 ', HLAfastaLoc, sep = '')
   system(cmd)
-  cmd <- paste('jellyfish dump mer_counts.jf > mer_counts_dumps.fa', sep = '')
+  cmd <- paste(jellyfish, ' dump mer_counts.jf > mer_counts_dumps.fa', sep = '')
   system(cmd)
   cmd <- paste('grep --invert-match \\> mer_counts_dumps.fa > ', kmerSize, 'mer_uniq', sep = '')
   system(cmd)
   system('rm mer_counts.jf')
   system('rm mer_counts_dumps.fa')
-
 }
 
-get.partially.matching.reads <- function(workDir, regionDir, BAMDir, BAMfile){
 
+get.partially.matching.reads <- function(workDir, regionDir, BAMDir, BAMfile) {
   kmerFile <- paste(workDir, '/', kmerSize, 'mer_uniq', sep = '')
 
   # add header
-  cmd <- paste('samtools view -H ', BAMDir, '/', BAMfile, ' > ', regionDir, '/fished.sam', sep = '')
+  cmd <- paste(samtools, ' view -H ', BAMDir, '/', BAMfile, ' > ',
+               regionDir, '/fished.sam', sep = '')
   system(cmd)
 
   # fish partially matching reads
-  cmd <- paste('samtools view ', BAMDir, '/', BAMfile, ' | grep -F -f ', kmerFile, ' >> ', regionDir, '/fished.sam', sep = '')
+  cmd <- paste(samtools, ' view ', BAMDir, '/', BAMfile, ' | grep -F -f ',
+               kmerFile, ' >> ', regionDir, '/fished.sam', sep = '')
   system(cmd)
 
   # convert to fastq
-  cmd <- paste('java -jar ', GATKDir, '/SamToFastq.jar I=', regionDir, '/fished.sam F=', regionDir, '/fished.1.fastq F2=', regionDir, '/fished.2.fastq VALIDATION_STRINGENCY=SILENT', sep = '')
+  cmd <- paste('java -jar ', GATKDir, '/SamToFastq.jar I=', regionDir,
+               '/fished.sam F=', regionDir, '/fished.1.fastq F2=', regionDir,
+               '/fished.2.fastq VALIDATION_STRINGENCY=SILENT', sep = '')
   system(cmd)
-
 }
 
-combine.fastqs <- function(chr6.f1, chr6.f2, fished.f1, fished.f2){
 
+combine.fastqs <- function(chr6.f1, chr6.f2, fished.f1, fished.f2) {
   chr6.f1.seq <- read.table(chr6.f1, sep = '\t', stringsAsFactors = FALSE, comment.char = '', quote = '')
   chr6.f2.seq <- read.table(chr6.f2, sep = '\t', stringsAsFactors = FALSE, comment.char = '', quote = '')
   fished.f1.seq <- read.table(fished.f1, sep = '\t', stringsAsFactors = FALSE, comment.char = '', quote = '')
@@ -276,10 +291,10 @@ combine.fastqs <- function(chr6.f1, chr6.f2, fished.f1, fished.f2){
 
   write.table(new.chr6.f1.seq, file = chr6.f1, sep = '\t', quote = FALSE, row.names = FALSE, col.names = FALSE)
   write.table(new.chr6.f2.seq, file = chr6.f2, sep = '\t', quote = FALSE, row.names = FALSE, col.names = FALSE)
-
 }
 
-count.events <- function(BAMfile, n){
+
+count.events <- function(BAMfile, n) {
   x              <- scanBam(BAMfile, index = BAMfile, param=ScanBamParam(what = scanBamWhat(), tag = 'NM'))
   readIDs        <- x[[1]][['qname']]
   cigar          <- x[[1]][['cigar']]
@@ -302,159 +317,137 @@ count.events <- function(BAMfile, n){
   return(y)
 }
 
-dont.count.twice <- function(BAMfile1, BAMfile2, normalBAMfile1, normalBAMfile2){
-
+dont.count.twice <- function(BAMfile1, BAMfile2, normalBAMfile1, normalBAMfile2) {
   x              <- scanBam(BAMfile1)
   readIDs_x      <- x[[1]][['qname']]
   y              <- scanBam(BAMfile2)
   readIDs_y      <- y[[1]][['qname']]
-  
+
   table(readIDs_x %in% readIDs_y)
-  
+
   xn             <- scanBam(normalBAMfile1)
   readIDs_xn     <- xn[[1]][['qname']]
   yn             <- scanBam(normalBAMfile2)
   readIDs_yn     <- yn[[1]][['qname']]
 
   remove.from.tumor  <- readIDs_x[which(readIDs_x %in% readIDs_y)]
-  remove.from.normal <- readIDs_xn[which(readIDs_xn %in% readIDs_yn)] 
-  
+  remove.from.normal <- readIDs_xn[which(readIDs_xn %in% readIDs_yn)]
+
   out <- list(remove.from.tumor, remove.from.normal)
   names(out) <- c('remove.from.tumor', 'remove.from.normal')
   return(out)
-  
 }
 
 
-getMisMatchPositionsPairwiseAlignment <- function(alignment, chunksize=60, returnlist=FALSE){
-  
+getMisMatchPositionsPairwiseAlignment <- function(alignment, chunksize = 60, 
+                                                  returnlist = FALSE) {
   seq1aln <- pattern(alignment) # Get the alignment for the first sequence
   seq2aln <- subject(alignment) # Get the alignment for the second sequence
-  
+
   #let's check differences across the whole thing
   gapsSeq1        <- countPattern("-",as.character(seq1aln))
   seq1alnresidues <- length(unlist(strsplit(as.character(seq1aln),split="")))-gapsSeq1
-  
+
   k <- 1
-  seq1Positions   <- c()
-  for (char in unlist(strsplit(as.character(seq1aln),split="")))
-  {
-    if(char%in%c('C','G','A','T'))
-    {
+  seq1Positions <- c()
+  for (char in unlist(strsplit(as.character(seq1aln),split=""))) {
+    if(char%in%c('C','G','A','T')) {
       seq1Positions <- c(seq1Positions,k)
       k <- k+1
       next;
     }
-    if(char%in%c('-'))
-    {
+    if (char%in%c('-')) {
       seq1Positions <- c(seq1Positions,k)
       next;
-      #
     }
   }
-  
-  
+
   k <- 1
-  seq2Positions   <- c()
-  for (char in unlist(strsplit(as.character(seq2aln),split="")))
-  {
-    if(char%in%c('C','G','A','T'))
-    {
+  seq2Positions <- c()
+  for (char in unlist(strsplit(as.character(seq2aln),split=""))) {
+    if (char %in% c('C','G','A','T')) {
       seq2Positions <- c(seq2Positions,k)
       k <- k+1
       next;
     }
-    if(char%in%c('-'))
-    {
+    if (char%in%c('-')) {
       seq2Positions <- c(seq2Positions,k)
       next;
-      #
     }
   }
-  
-  diffSeq1 <-  seq1Positions[unlist(strsplit(as.character(seq1aln),split=""))!=unlist(strsplit(as.character(seq2aln),split=""))]
-  diffSeq2 <-  seq2Positions[unlist(strsplit(as.character(seq1aln),split=""))!=unlist(strsplit(as.character(seq2aln),split=""))]
-  
+
+  diffSeq1 <- seq1Positions[unlist(strsplit(as.character(seq1aln),split=""))!=unlist(strsplit(as.character(seq2aln),split=""))]
+  diffSeq2 <- seq2Positions[unlist(strsplit(as.character(seq1aln),split=""))!=unlist(strsplit(as.character(seq2aln),split=""))]
+
   diffType1 <- rep(1,length(diffSeq1))
   diffType1[which(unlist(strsplit(as.character(seq1aln),split=""))[unlist(strsplit(as.character(seq1aln),split=""))!=unlist(strsplit(as.character(seq2aln),split=""))]%in%'-')] <- 2
-  
+
   diffType2 <- rep(1,length(diffSeq2))
   diffType2[which(unlist(strsplit(as.character(seq2aln),split=""))[unlist(strsplit(as.character(seq2aln),split=""))!=unlist(strsplit(as.character(seq1aln),split=""))]%in%'-')] <- 2
-  
-  
+
   out <- list()
   out$diffSeq1 <- diffSeq1
   out$diffSeq2 <- diffSeq2
   out$diffType1 <- diffType1
   out$diffType2 <- diffType2
   return(out)
-  
 }
 
 
-getUniqMapReads <- function(workDir
-                            ,BAMDir
-                            ,override=FALSE
-                            ,overrideDir = NULL
-)
-{
-
-  if(!override){
-    outDir     <- paste(workDir, '/flagstat/', sep = '')
-    if( !file.exists(outDir)){
-      if( !dir.create(outDir, recursive = TRUE) ){
-        stop(paste("Unable to create directory: ",outDir, "!\n", sep = ''))
+getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
+                            overrideDir = NULL) {
+  if (!override) {
+    outDir <- paste(workDir, '/flagstat/', sep = '')
+    if (!file.exists(outDir)) {
+      if (!dir.create(outDir, recursive = TRUE)) {
+        stop(paste("Unable to create directory: ", outDir, "!\n", sep = ''))
       }
     }
 
-    BAMs       <- list.files(BAMDir, pattern = 'bam$', full.names = TRUE)
+    BAMs <- list.files(BAMDir, pattern = 'bam$', full.names = TRUE)
 
-    for(BAM in BAMs){
-      region <- unlist(strsplit(BAM, split = '/'))[length(unlist(strsplit(BAM, split = '/')))]
-      cmd    <- paste('samtools flagstat ', BAM, ' > ', outDir, region, '.proc.flagstat', sep = '')
+    for (BAM in c(tumorBAMfile, normalBAMfile)) {
+      region <- unlist(strsplit(BAM, split = '/')) %>% { .[length(.)] }
+      cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', outDir, 
+                    region, '.proc.flagstat')
       system(cmd)
-    }  
-  }    
-
-  if(override){
-
+    }
+  } else {
     outDir <- overrideDir
+  }
 
-  }
-  
-  flagStatRegions  <- list.files(outDir,pattern=".proc.flagstat$")
-  if(length(flagStatRegions) == 0){
+  flagStatRegions <- list.files(outDir, pattern = ".proc.flagstat$") %>%
+    { grep('filtered', ., invert = T, value = T) }
+
+  if (length(flagStatRegions) == 0) {
     stop('Either run flagstat or do not override.')
-  }  
-  
-  UniqMapReads <- list()
-  
-  for (flagStatRegion in flagStatRegions)
-  {
-    
-    UniqMapReads[[unlist(strsplit(flagStatRegion,split="\\."))[1]]] <-as.numeric(read.table(paste(outDir, '/', flagStatRegion,sep=""),stringsAsFactors=FALSE,header=FALSE,nrows =1)[,1])    
-    
   }
-  
+
+  UniqMapReads <- lapply(inverseNames(baseName(flagStatRegions)), 
+    function(x) {
+      fn <- paste0(outDir, x)
+      print(fn)
+      as.numeric(read.table(fn, stringsAsFactors = FALSE, header = FALSE,
+                            nrows = 1)[,1])
+    })
   return(UniqMapReads)
-  
 }
 
-funCalcN_withBAF <- function(logRSites,bafSites,tumorPloidy,tumorPurity,gamma)
-{
-  
+
+funCalcN_withBAF <- function(logRSites, bafSites,
+                             tumorPloidy, tumorPurity, gamma) {
   nA <- (tumorPurity-1+bafSites*2^(logRSites/gamma)*((1-tumorPurity)*2+tumorPurity*tumorPloidy))/tumorPurity
   nB <- (tumorPurity-1-(bafSites-1)*2^(logRSites/gamma)*((1-tumorPurity)*2+tumorPurity*tumorPloidy))/tumorPurity
   return(cbind(nA,nB))
-  
 }
 
-funCalcN_withoutBAF <- function(rSites,tumorPloidy,tumorPurity,gamma)
-{
+
+funCalcN_withoutBAF <- function(rSites, tumorPloidy, tumorPurity, gamma) {
   return(((((1-tumorPurity)+tumorPurity*tumorPloidy/2))*2^(rSites/gamma) - (1-tumorPurity))/tumorPurity )
 }
 
-t.test.NA <- function(x){
+
+t.test.NA <- function(x) {
   if(length(x[!is.na(x)]) <= 1){
     stat <- NA
     ci   <- c(NA, NA)
@@ -467,58 +460,120 @@ t.test.NA <- function(x){
   }
 }
 
+#' Get exon positions for HLA
+#'
+#'
+getHlaExons <- function(allele, pickAllele = 'all') {
+  alleleExonFormatted <- strsplit(allele, split = "_") %>%
+    unlist %>%
+    { paste('HLA-', .[2], '\\*',
+            paste(.[3:length(.)], collapse = ':'), sep = '') } %>%
+    toupper()
+  ## Retrieve first matching allele
+  cmd <- paste("awk \'/^DE   ", alleleExonFormatted,
+               "/ {p=1}; p; /^SQ   Sequence/ {p=0}\' ", HLAexonLoc, sep  = '')
+  awkResult <- system(cmd, intern = TRUE)
+  if (length(awkResult) == 0) return(NULL)
 
-#############################
-# create output directories # 
-#############################
+  if (pickAllele == 'first') {
+    awkResult %<>% { .[1:(which(grepl('^SQ', .))[1])] }
+  } else if (pickAllele == 'largest') {
+    ## TODO implement me
+    # awkResult %>% { which.max(diff(which(grepl('^SQ', .)))) + 1 }
+  } else if (pickAllele == 'all') {
+    ## No selection
+  }
 
-if(!dir.exists(workDir))
-{
-  dir.create(workDir,recursive=TRUE)
+  hlaExons <- grep('^FT   exon', awkResult, value = TRUE) %>%
+    { strsplit(., split=" ") } %>%
+    { do.call(rbind, .) } %>%
+    { .[, ncol(.)] } %>%
+    unique %>%
+    naturalsort
+
+  if (length(hlaExons) != 0) {
+    exonTable <- c()
+    for (i in 1:length(hlaExons)) {
+      exonTable <- rbind(exonTable,
+                         unlist(strsplit(hlaExons[i], split = "\\.\\.")))
+    }
+  }
+  return(list(hlaExons, exonTable))
 }
 
-if(!dir.exists(figureDir))
-{
-  dir.create(figureDir,recursive=TRUE)
+
+#' Get base name of file and reduce it to everything leading up to first dot
+#'
+#'
+baseName <- function(fns) {
+  sapply(fns, function(fn) unlist(strsplit(basename(fn), split = "\\."))[1])
 }
 
-params <- list(full.patient, workDir, hlaPath, normalBAMfile, BAMDir, HLAfastaLoc, CopyNumLoc, GATKDir, NOVODir)
-names(params) <- c('full.patient', 'workDir', 'hlaPath', 'normalBAMfile', 'BAMDir', 'HLAfastaLoc', 'CopyNumLoc', 'GATKDir', 'NOVODir')
+
+#' Exchange a character vector's names and values
+#'
+#'
+inverseNames <- function(vec) {
+  stopifnot(is.character(vec))
+  stopifnot(is.character(names(vec)))
+  setNames(names(vec), vec)
+}
+
+
+#############################
+# create output directories #
+#############################
+
+if (!dir.exists(workDir)) {
+  dir.create(workDir, recursive = TRUE)
+}
+
+if (!dir.exists(figureDir)) {
+  dir.create(figureDir, recursive = TRUE)
+}
+
+params <- list(full.patient, workDir, hlaPath, normalBAMfile, tumorBAMfile, 
+               BAMDir, HLAfastaLoc, CopyNumLoc, GATKDir, NOVODir)
+names(params) <- c('full.patient', 'workDir', 'hlaPath', 'normalBAMfile',
+                   'tumorBAMfile', 'BAMDir', 'HLAfastaLoc', 'CopyNumLoc', 
+                   'GATKDir', 'NOVODir')
 document.params(params, log.name)
 
 
-
 #############################
-# get HLA-specific mappings # 
+# get HLA-specific mappings #
 #############################
 
-BAMfiles  <- list.files(BAMDir, pattern = '.bam$')
-
-if(length(BAMfiles)<2)
-{
-  stop(paste('Cannot find 2 bam files within ',BAMDir))
-}
-
-regions   <- sapply(BAMfiles, FUN =function(x) {return(unlist(strsplit(x, split = '.bam'))[1])})
+BAMfiles  <- c(basename(tumorBAMfile), basename(normalBAMfile))
+regions <- sapply(BAMfiles, function(x) unlist(strsplit(x, split = '.bam'))[1])
+normalName <- regions[basename(normalBAMfile)]
 
 hlaAlleles <- read.table(hlaPath, sep = '\t', header = FALSE, as.is = TRUE)
-if(ncol(hlaAlleles) == 3){
+if (ncol(hlaAlleles) == 3) {
   hlaAlleles <- unique(sort(c(hlaAlleles$V2, hlaAlleles$V3)))
+} else if (ncol(hlaAlleles) == 1) {
+  hlaAlleles <- unique(sort(hlaAlleles$V1))
 } else {
-    if(ncol(hlaAlleles) == 1){
-    hlaAlleles <- unique(sort(hlaAlleles$V1))
-  }
+  stop('Unexpected parsing of hlaPath')
 }
 
-hlaFasta   <- read.fasta(HLAfastaLoc)
+hlaFasta <- read.fasta(HLAfastaLoc)
+if (!all(hlaAlleles %in% names(hlaFasta))) {
+  warning(paste('Missing HLAs from FASTA: ',
+                paste(hlaAlleles[-which(hlaAlleles %in% names(hlaFasta))],
+                      collapse = ', '),
+                '\nTrying to find alternative.', sep = ''))
 
-if(!all(hlaAlleles %in% names(hlaFasta))) {
-  warning(paste('Missing HLAs from FASTA: ', paste(hlaAlleles[-which(hlaAlleles %in% names(hlaFasta))], collapse = ', '), '\nTrying to find alternative.', sep = ''))
-  if(length(which(hlaAlleles %in% names(hlaFasta))) == 0 ) {  missing <- hlaAlleles } 
-  if(length(which(hlaAlleles %in% names(hlaFasta))) != 0 ) {  missing <- hlaAlleles[-which(hlaAlleles %in% names(hlaFasta))] } 
-  for(i in missing){
+  if (length(which(hlaAlleles %in% names(hlaFasta))) == 0 ) {
+    missing <- hlaAlleles
+  }
+  if (length(which(hlaAlleles %in% names(hlaFasta))) != 0 ) {
+    missing <- hlaAlleles[-which(hlaAlleles %in% names(hlaFasta))]
+  }
+
+  for (i in missing){
     alt <- grep(pattern = i, x = names(hlaFasta), value = TRUE)[1]
-    if(!is.na(alt)){
+    if (!is.na(alt)) {
       warning(paste('Replacing: ', i, ' with ',alt,  '.', sep = ''))
       hlaAlleles[which(hlaAlleles == i)] <- alt
     }
@@ -528,125 +583,151 @@ if(!all(hlaAlleles %in% names(hlaFasta))) {
 
 # check for homozygous alleles here to save time on mapping step.
 # also figure out if hla names will be uniformly 'hla_x'
-if(length(grep('hla_a', x = hlaAlleles))== 1){
-  write.table(paste('\nHomozygous for HLA-A -- not going to see any LOH here.', '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+if (length(grep('hla_a', x = hlaAlleles)) == 1) {
+  write.table(paste('\nHomozygous for HLA-A -- not going to see any LOH here.', 
+                    '\n', sep = ''), 
+              file = log.name, quote = FALSE, row.names = FALSE, 
+              col.names = FALSE, append = TRUE)
   hlaAlleles <- hlaAlleles[-grep('hla_a', x = hlaAlleles)]
 }
 
-if(length(grep('hla_b', x = hlaAlleles))== 1){
-  write.table(paste('\nHomozygous for HLA-B -- not going to see any LOH here.', '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+if (length(grep('hla_b', x = hlaAlleles)) == 1) {
+  write.table(paste('\nHomozygous for HLA-B -- not going to see any LOH here.', 
+                    '\n', sep = ''), 
+              file = log.name, quote = FALSE, row.names = FALSE, 
+              col.names = FALSE, append = TRUE)
   hlaAlleles <- hlaAlleles[-grep('hla_b', x = hlaAlleles)]
 }
 
-if(length(grep('hla_c', x = hlaAlleles))== 1){
-  write.table(paste('\nHomozygous for HLA-C -- not going to see any LOH here.', '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+if (length(grep('hla_c', x = hlaAlleles)) == 1) {
+  write.table(paste('\nHomozygous for HLA-C -- not going to see any LOH here.', 
+                    '\n', sep = ''), 
+              file = log.name, quote = FALSE, row.names = FALSE, 
+              col.names = FALSE, append = TRUE)
   hlaAlleles <- hlaAlleles[-grep('hla_c', x = hlaAlleles)]
 }
 
-if(length(hlaAlleles) == 0){
+if (length(hlaAlleles) == 0) {
   stop('No suitable HLA alleles!')
 }
 
-if(mapping.step){
-
+if (mapping.step) {
   # generate patient reference fasta
-  write.table(paste('\ngenerate patient reference fasta at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+  write.table(paste('\ngenerate patient reference fasta at ', date(), '\n', 
+                    sep = ''), 
+              file = log.name, quote = FALSE, row.names = FALSE,
+              col.names = FALSE, append = TRUE)
   patient.hlaFasta <- hlaFasta[hlaAlleles]
-  write.fasta(patient.hlaFasta, file = paste(workDir, '/', full.patient, '.patient.hlaFasta.fa', sep = ''), names = names(patient.hlaFasta))
+  write.fasta(patient.hlaFasta, file = paste(workDir, '/', full.patient,
+                                             '.patient.hlaFasta.fa', sep = ''),
+              names = names(patient.hlaFasta))
 
   # nix file for patient reference fasta -- novoalign
-  write.table(paste('\nnix file for patient reference fasta at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-  novoindexCMD <- paste('novoindex ', workDir, '/', full.patient, '.patient.hlaFasta.nix', ' ', workDir, '/', full.patient, '.patient.hlaFasta.fa', sep = '')
-  write.table(novoindexCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+  write.table(paste0('\nnix file for patient reference fasta at ', 
+                     date(), '\n'), 
+              file = log.name, quote = FALSE, row.names = FALSE, 
+              col.names = FALSE, append = TRUE)
+  novoindexCMD <- paste0('novoindex -t ', NOVOThreads, ' ',
+                         workDir, '/', full.patient,
+                         '.patient.hlaFasta.nix', ' ', workDir, '/',
+                         full.patient, '.patient.hlaFasta.fa')
+  write.table(novoindexCMD, file = log.name, quote = FALSE, row.names = FALSE,
+              col.names = FALSE, append = TRUE)
   system(novoindexCMD)
 
-  if(fishing.step){
-    write.table(paste('\ncreate kmer file at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+  if (fishing.step) {
+    write.table(paste('\ncreate kmer file at ', date(), '\n', sep = ''), 
+                file = log.name, quote = FALSE, row.names = FALSE, 
+                col.names = FALSE, append = TRUE)
     create.kmer.file(workDir, kmerSize, HLAfastaLoc)
   }
 
-  for(BAMfile in BAMfiles){
-    
+  for (BAMfile in BAMfiles) {
     BAMid <- unlist(strsplit(BAMfile, split = '.bam'))[1]
-    
-    if(paste(BAMDir, '/', BAMfile, sep = '') == normalBAMfile){
-      normalName <- BAMid
-    }
 
-    print(BAMid)
-    
     regionDir <- paste(workDir, '/', BAMid, sep = '')
-    if(!dir.exists(regionDir))
-    {
+    if (!dir.exists(regionDir)) {
       dir.create(regionDir,recursive=TRUE)
     }
-    
-    #extract HLA possible reads from BAM file
-    write.table(paste('\nextract HLA possible reads from BAM file at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+
+    # extract HLA possible reads from BAM file
+    write.table(paste('\nextract HLA possible reads from BAM file at ',
+                      date(), '\n', sep = ''),
+                file = log.name, quote = FALSE, row.names = FALSE,
+                col.names = FALSE, append = TRUE)
 
     # chr 6 and contigs
-    samtoolsCMD <- paste("samtools view -H ", BAMDir, '/', BAMfile, " > " , regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+    BAM_chr6_region <- file.path(regionDir, paste0(BAMid, ".chr6region.sam"))
+    BAMfile_full <- file.path(BAMDir, BAMfile)
+    # copy header of original bam file
+    samtoolsCMD <- paste0(samtools, " view -H ", BAMfile_full, " > ",
+                          BAM_chr6_region)
+    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE,
+                col.names = FALSE, append = TRUE)
     system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6:29909037-29913661 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6:31321649-31324964 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6:31236526-31239869 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
+    if (!file.exists(BAM_chr6_region) || file.size(BAM_chr6_region) <= 4) {
+      warning(paste0('Did not correctly parse bam head for ', BAMfile_full))
+      browser()
+    }
+    header_file_size <- file.size(BAM_chr6_region)
 
-    # mapped reads
-    # samtoolsCMD <- paste("samtools view -F 4 ",BAMDir, '/', BAMfile, ' >> ', regionDir, '/', BAMid, ".chr6region.sam ", sep = "")
-    # write.table(paste(samtoolsCMD, '\n', sep = ''), file = log.name, row.names=FALSE, col.names=FALSE, quote=FALSE, append = TRUE)
-    # system(samtoolsCMD)
+    # Read out the names of alternate loci
+    # readLines(BAM_chr6_region) %>% 
+    #   { grep('SN', ., value = T) } %>%
+    #   { grep('Un', ., value = T) } %>%
+    #   strsplit('\t') %>% .[[1]] %>% .[2] %>% { grepl('chr', .) }
 
-    # unmapped reads
-    # samtoolsCMD <- paste("samtools view -f 4 ",BAMDir, '/', BAMfile, ' >> ', regionDir, '/', BAMid, ".chr6region.sam ", sep = "")
-    # write.table(paste(samtoolsCMD, '\n', sep = ''), file = log.name, row.names=FALSE, col.names=FALSE, quote=FALSE, append = TRUE)
-    # system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_apd_hap1 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
+    if (genomeAssembly == 'hg19') {
+      hla_locs <- c('6:29909037-29913661', '6:31321649-31324964',
+                    '6:31236526-31239869')
+    } else if (genomeAssembly == 'grch38') {
+      hla_locs <- c('6:29941260-29945884', '6:31353872-31357187',
+                    '6:31268749-31272092')
+    }
+    # Check if chromosome names are prefixed by the string 'chr'
+    chr_prefix <- readLines(BAM_chr6_region, n = 2)[2] %>% 
+      strsplit('\t') %>% .[[1]] %>% .[2] %>% { grepl('chr', .) }
+    if (chr_prefix) 
+      hla_locs <- paste0('chr', hla_locs)
 
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_cox_hap2 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_dbb_hap3 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_mann_hap4 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_mcf_hap5 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_qbl_hap6 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    samtoolsCMD <- paste("samtools view ", BAMDir, '/', BAMfile, " chr6_ssto_hap7 >> ",regionDir,"/",BAMid,".chr6region.sam",sep="")
-    write.table(samtoolsCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    system(samtoolsCMD)
-    
-    # turn into fastq -- this step has an error with unpaired mates, but seems to work ok just the same (VALIDATION_STRINGENCY=SILENT)
-    write.table(paste('\nturn into fastq at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+    for (i in seq_along(hla_locs)) {
+      samtoolsCMD <- paste(samtools, " view ", BAMfile_full, ' ', hla_locs[i],
+                           " >> ", BAM_chr6_region, sep = "")
+      write.table(samtoolsCMD, file = log.name, quote = FALSE, 
+                  row.names = FALSE, col.names = FALSE, append = TRUE)
+      system(samtoolsCMD)
+    }
+
+    if (file.size(BAM_chr6_region) <= header_file_size) {
+      warning(paste0('Did not filter reads correctly for ', BAMfile_full))
+      browser()
+    }
+
+    # TODO account for variable presence of chr prefix here?
+    # Automatically infer names of alternate loci?
+    if (genomeAssembly == 'hg19') {
+      for (chrom_name in c('chr6_apd_hap1', 'chr6_cox_hap2', 'chr6_dbb_hap3',
+                           'chr6_mann_hap4', 'chr6_mcf_hap5', 'chr6_qbl_hap6',
+                           'chr6_ssto_hap7')) {
+        samtoolsCMD <- paste0(samtools, " view ", BAMfile_full, " ", chrom_name, 
+                              " >> ",regionDir, "/", BAMid, ".chr6region.sam") 
+        write.table(samtoolsCMD, file = log.name, quote = FALSE, 
+                    row.names = FALSE, col.names = FALSE, append = TRUE)
+        system(samtoolsCMD)
+      }
+    }
+
+    # turn into fastq -- this step has an error with unpaired mates, but seems
+    # to work ok just the same (VALIDATION_STRINGENCY=SILENT)
+    write.table(paste('\nturn into fastq at ', date(), '\n', sep = ''), 
+                file = log.name, quote = FALSE, row.names = FALSE, 
+                col.names = FALSE, append = TRUE)
     samToFastQ <- paste("java -jar ",GATKDir,"/SamToFastq.jar ","I=",regionDir,"/",BAMid,".chr6region.sam"," F=",regionDir,"/",BAMid,".chr6region.1.fastq"," F2=",regionDir,"/",BAMid,".chr6region.2.fastq"," VALIDATION_STRINGENCY=SILENT",sep="")
     write.table(samToFastQ, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
     system(samToFastQ)
 
     # fished reads
-    if(fishing.step){
+    if (fishing.step) {
       write.table(paste('\nget partially matching reads and turn fished sam into fastq at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
       get.partially.matching.reads(workDir, regionDir, BAMDir, BAMfile)
       write.table(paste('\ncombine chr6 reads with fished reads at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
@@ -657,57 +738,73 @@ if(mapping.step){
       combine.fastqs(chr6.f1, chr6.f2, fished.f1, fished.f2)
     }
 
-    
     # align to all HLA alleles
-    write.table(paste('\nalign to all HLA alleles at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)  
-    
-    alignCMD <- paste(NOVODir, '/novoalign -d ', workDir, '/', full.patient, '.patient.hlaFasta.nix', ' -f ', regionDir,"/",BAMid,".chr6region.1.fastq", ' ', regionDir,"/",BAMid,".chr6region.2.fastq", ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW 1> ', regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.sam ', '2> ', regionDir, '/', BAMid, '_BS_GL.chr6region.patient.reference.hlas.metrics', sep = '')
-    write.table(alignCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+    write.table(paste('\nalign to all HLA alleles at ', date(), '\n', sep = ''), 
+                file = log.name, quote = FALSE, row.names = FALSE, 
+                col.names = FALSE, append = TRUE)
+
+    alignCMD <- paste0(NOVODir, '/novoalign -d ', workDir, '/', full.patient,
+                       '.patient.hlaFasta.nix', ' -f ',
+                       regionDir, "/", BAMid,".chr6region.1.fastq", ' ',
+                       regionDir, "/", BAMid,".chr6region.2.fastq", 
+                       ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW 1',
+                       ' -c ', NOVOThreads,
+                       ' > ', regionDir, '/', BAMid, 
+                       '.chr6region.patient.reference.hlas.sam ', 
+                       '2> ', regionDir, '/', BAMid,
+                       '_BS_GL.chr6region.patient.reference.hlas.metrics')
+    write.table(alignCMD, file = log.name, quote = FALSE, row.names = FALSE, 
+                col.names = FALSE, append = TRUE)
     system(alignCMD)
 
-    convertToBam <- paste("samtools view -bS -o ",regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.bam'," ",regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.sam' , sep="")
+    convertToBam <- paste(samtools, " view -bS -o ",regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.bam'," ",regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.sam' , sep="")
     write.table(convertToBam, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
     system(convertToBam)
-    
+
     # sort
     sortBAM <- paste("java -jar ",GATKDir,"/SortSam.jar"," I=",regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.bam'," ","O=",regionDir,"/",BAMid,".chr6region.patient.reference.hlas.csorted.bam", " SORT_ORDER=coordinate",sep="")
     write.table(sortBAM, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
     system(sortBAM)
-    
+
     # remove duplicates
-    removeDup <- paste('samtools rmdup ', regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.csorted.bam ', regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.csorted.noduplicates.bam', sep = '')
+    removeDup <- paste(samtools, ' rmdup ', regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.csorted.bam ', regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.csorted.noduplicates.bam', sep = '')
     write.table(removeDup, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
     system(removeDup)
-    
+
     # only take reads that are in proper pair
-    readPairs <- paste("samtools view -f 2 -b -o ",regionDir,"/",BAMid,".chr6region.patient.reference.hlas.csorted.noduplicates.filtered.bam"," ",regionDir,"/",BAMid,".chr6region.patient.reference.hlas.csorted.noduplicates.bam",sep="")
+    readPairs <- paste(samtools, " view -f 2 -b -o ",regionDir,"/",BAMid,".chr6region.patient.reference.hlas.csorted.noduplicates.filtered.bam"," ",regionDir,"/",BAMid,".chr6region.patient.reference.hlas.csorted.noduplicates.bam",sep="")
     write.table(readPairs, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
     system(readPairs)
-    
-    # let's index the aligned bam
-    indexBAM <- paste("samtools index ",regionDir,"/",BAMid,".chr6region.patient.reference.hlas.csorted.noduplicates.filtered.bam",sep="")
-    write.table(indexBAM, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+
+    # index the aligned bam
+    indexBAM <- paste0(samtools, ' index ',regionDir, '/', BAMid, 
+                       '.chr6region.patient.reference.hlas.csorted',
+                       '.noduplicates.filtered.bam')
+    write.table(indexBAM, file = log.name, quote = FALSE, row.names = FALSE,
+                col.names = FALSE, append = TRUE)
     system(indexBAM)
-    
-    hlaBAMfile <- paste(regionDir, '/', BAMid, '.chr6region.patient.reference.hlas.csorted.noduplicates.filtered.bam', sep = '')
-    
-    for (allele in hlaAlleles)
-    {
-      
-      write.table(paste('\nget HLA specific SAM for allele: ', allele,  ' at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-      
-      getReads <- paste("samtools view -b -o ", regionDir,"/",BAMid,".temp.",allele, ".bam ", hlaBAMfile, " ", allele, sep = '')
+
+    hlaBAMfile <- paste0(regionDir, '/', BAMid, '.chr6region.patient',
+                         '.reference.hlas.csorted.noduplicates.filtered.bam')
+
+    for (allele in hlaAlleles) {
+      write.table(paste('\nget HLA specific SAM for allele: ', allele,  ' at ', 
+                        date(), '\n', sep = ''), file = log.name, 
+                  quote = FALSE, row.names = FALSE, 
+                  col.names = FALSE, append = TRUE)
+
+      getReads <- paste(samtools, " view -b -o ", regionDir,"/",BAMid,".temp.",allele, ".bam ", hlaBAMfile, " ", allele, sep = '')
       write.table(getReads, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
       system(getReads)
-      
-      samtoolsSort <- paste("samtools sort ",regionDir,"/",BAMid,".temp.",allele, ".bam"," -o ",regionDir,"/",BAMid,".type.",allele, ".bam",sep="")
+
+      samtoolsSort <- paste(samtools, " sort ",regionDir,"/",BAMid,".temp.",allele, ".bam"," -o ",regionDir,"/",BAMid,".type.",allele, ".bam",sep="")
       write.table(samtoolsSort, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-      system(samtoolsSort)  
-      
-      samtoolsIndex <- paste("samtools index ",regionDir,"/",BAMid,".type.",allele, ".bam",sep="")
+      system(samtoolsSort)
+
+      samtoolsIndex <- paste(samtools, " index ",regionDir,"/",BAMid,".type.",allele, ".bam",sep="")
       write.table(samtoolsIndex, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-      system(samtoolsIndex)  
-      
+      system(samtoolsIndex)
+
       # and filter out reads that have too many events -- has to be done here because some reads map to multiple alleles
       passed.reads <- count.events(paste(regionDir, '/', BAMid, '.type.', allele, '.bam', sep = ''), n = numMisMatch)
       write.table(passed.reads, file = paste(regionDir, '/', BAMid, '.', allele, '.passed.reads.txt', sep = ''), sep = '\t', quote = FALSE, row.names = FALSE, col.names = FALSE)
@@ -715,261 +812,260 @@ if(mapping.step){
       write.table(extractCMD, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
       system(extractCMD)
 
-      samtoolsIndex <- paste("samtools index ",regionDir,"/",BAMid,".type.",allele, ".filtered.bam",sep="")
+      samtoolsIndex <- paste(samtools, " index ",regionDir,"/",BAMid,".type.",allele, ".filtered.bam",sep="")
       write.table(samtoolsIndex, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
       system(samtoolsIndex)
-      
     }
-    
   }
-
 }
 
 
 
 ############################
-# get coverage for regions # 
+# get coverage for regions #
 ############################
 
-for (region in regions)
-{
-  
-  write.table(paste('\nget coverage of HLA alleles for region: ', region, ' at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-  
-  regionDir <- paste(workDir, '/', region, sep = '')
-  BAMfiles  <- grep('filtered.bam$', grep('type',list.files(regionDir),value=TRUE),value=TRUE)
+for (region in regions) {
+  write.table(paste('\nget coverage of HLA alleles for region: ', region,
+                    ' at ', date(), '\n', sep = ''),
+              file = log.name, quote = FALSE,
+              row.names = FALSE, col.names = FALSE, append = TRUE)
 
-  if(paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile){
+  regionDir <- paste(workDir, '/', region, sep = '')
+  filteredBAMfiles  <- grep('filtered.bam$', 
+                            grep('type', list.files(regionDir), value=TRUE), 
+                            value=TRUE)
+
+  if (paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile) {
     type <- 'normal'
-  } else{
+  } else {
     type <- 'tumor'
   }
-  
-  #let's get pileup files for each bam
-  for (BAMfile in c(BAMfiles))
-  {      
-    
-    hlaAllele <- grep(pattern = 'hla', x = unlist(strsplit(BAMfile, split = '\\.')), value = TRUE)
 
-    mpileupFile <- paste(workDir, '/', region,".",hlaAllele,".",type,".mpileup",sep="")
-    
-    #cmd         <- paste("samtools mpileup -q 20 -Q 20 ", regionDir, "/", BAMfile," -f ", HLAfastaLoc, " > ",mpileupFile,sep="")
-    cmd         <- paste("samtools mpileup ", regionDir, "/", BAMfile," -f ", HLAfastaLoc, " > ",mpileupFile,sep="")
+  # let's get pileup files for each bam
+  for (BAMfile in filteredBAMfiles) {
+    hlaAllele <- grep(pattern = 'hla', 
+                      x = unlist(strsplit(BAMfile, split = '\\.')), 
+                      value = TRUE)
+    # make hlaAllele inference robust to file names that have the words
+    # hla_loci in them
+    if (length(hlaAllele) > 1) {
+      hlaAllele <- grep('hla_(?!loci)', hlaAllele, value = T, perl = T)
+    }
+    mpileupFile <- paste0(workDir, '/', region, ".", hlaAllele, ".", type,
+                          ".mpileup")
 
-    write.table(cmd, file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+    cmd <- paste(samtools, " mpileup ", regionDir, "/", BAMfile," -f ",
+                 HLAfastaLoc, " > ",mpileupFile,sep="")
+
+    write.table(cmd, file = log.name, quote = FALSE, row.names = FALSE,
+                col.names = FALSE, append = TRUE)
     system(cmd)
-    
   }
-
 }
 
-# also extract number of unique reads sequenced in tumor and normal
-if(runWithNormal){
-
-  normalName <- regions[which(paste(BAMDir, '/', regions, '.bam', sep = '') == normalBAMfile)]
-  
-  if(!override){
-    regionUniqMappedRegions <- getUniqMapReads(workDir = workDir, BAMDir = BAMDir, override = FALSE)
+# extract number of unique reads sequenced in tumor and normal
+if (runWithNormal) {
+  if (!override) {
+    regionUniqMappedRegions <- getUniqMapReads(workDir = workDir, 
+                                               BAMDir = BAMDir, 
+                                               override = FALSE)
+  } else {
+    regionUniqMappedRegions <- getUniqMapReads(workDir = workDir, 
+                                               BAMDir = BAMDir, 
+                                               override = TRUE,
+                                               overrideDir = overrideDir)
   }
-  if(override){
-    regionUniqMappedRegions <- getUniqMapReads(workDir = workDir, BAMDir = BAMDir, override = TRUE, overrideDir = overrideDir) 
-  }
-
-  # this will need to change if normal BAM doesn't have GL in name
-  #GermLineUniqMappedReads <- regionUniqMappedRegions[[grep("GL",names(regionUniqMappedRegions),value=TRUE)]]
-  GermLineUniqMappedReads <- regionUniqMappedRegions[[grep(normalName,names(regionUniqMappedRegions),value=TRUE)]]
-
+  GermLineUniqMappedReads <- 
+    regionUniqMappedRegions[[grep(normalName, names(regionUniqMappedRegions), 
+                                  value = TRUE)]]
 }
 
 
 
 ####################################
-# compare coverage between alleles # 
+# compare coverage between alleles #
 ####################################
 
-normalName <- regions[which(paste(BAMDir, '/', regions, '.bam', sep = '') == normalBAMfile)]
 
 # let's load the winners
-# next, we can look at each mpileupFile, and assess whether we see differences in coverage between the two. 
-# let's look at a region of interest. 
+# next, we can look at each mpileupFile, and assess whether we see differences
+# in coverage between the two.  
+# let's look at a region of interest.
 PatientOutPut <- c()
 
-for (region in regions)
-{
-
-  if(paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile){
+for (region in regions) {
+  if (paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile) {
     next
   }
-  
-  print(region)
-
-  if(runWithNormal){
+  if (runWithNormal) {
     UniqMappedReads <- regionUniqMappedRegions[[region]]
-    MultFactor      <- as.numeric(GermLineUniqMappedReads/UniqMappedReads)
+    MultFactor <- as.numeric(GermLineUniqMappedReads/UniqMappedReads)
   }
 
-  if(!runWithNormal){
-    MultFactor      <- 1
+  if (!runWithNormal) {
+    MultFactor <- 1
   }
-  
-  if(coverageStep)
-  {  
-    write.table(paste('\nanalyzing coverage differences in region: ', region, ' at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-    
+
+  if (coverageStep) {
+    write.table(paste('\nanalyzing coverage differences in region: ', region, 
+                      ' at ', date(), '\n', sep = ''), file = log.name, 
+                quote = FALSE, row.names = FALSE, col.names = FALSE, 
+                append = TRUE)
+
     HLAoutPut <- c()
-    
-    for (HLA_gene in c('hla_a','hla_b','hla_c'))
-    {
-      
+
+    for (HLA_gene in c('hla_a','hla_b','hla_c')) {
       print(HLA_gene)
-     
+
       # remove tmp plotting files so if this step fails, can't plot incorrectly
-      if(file.exists(paste(figureDir, '/', region, '.', HLA_gene, '.tmp.data.plots.RData', sep = '')))
-      {
-        cmd <- paste('rm ', figureDir, '/', region, '.', HLA_gene, '.tmp.data.plots.RData', sep = '')
+      if (file.exists(paste(figureDir, '/', region, '.', HLA_gene,
+                            '.tmp.data.plots.RData', sep = ''))) {
+        cmd <- paste('rm ', figureDir, '/', region, '.', HLA_gene, 
+                     '.tmp.data.plots.RData', sep = '')
         system(cmd)
       }
 
-      HLA_As            <- grep(HLA_gene,hlaAlleles,value=TRUE)
-      if(length(HLA_As)<=1)
-      {
+      HLA_As <- grep(HLA_gene, hlaAlleles, value=TRUE)
+      if (length(HLA_As) <= 1) {
         next
       }
       HLA_A_type1 <- HLA_As[1]
       HLA_A_type2 <- HLA_As[2]
-      
+
       # the reference sequence for the patient's two HLA alleles
       HLA_type1Fasta <- hlaFasta[[HLA_A_type1]]
       HLA_type2Fasta <- hlaFasta[[HLA_A_type2]]
-      
-      #perform local pairwise alignement
-      {
-        seq1 <- PasteVector(toupper(HLA_type1Fasta),sep="")
-        seq2 <- PasteVector(toupper(HLA_type2Fasta),sep="")
-        sigma <- nucleotideSubstitutionMatrix(match = 2, mismatch = -1, baseOnly = TRUE)
-        
-        tmp <- pairwiseAlignment(seq1, seq2, substitutionMatrix = sigma, gapOpening = -2,gapExtension = -4, scoreOnly = FALSE,type='local')
-        
-        missMatchPositions <- getMisMatchPositionsPairwiseAlignment(tmp,returnlist=TRUE)
-        if(length(missMatchPositions$diffSeq1) == 0){
-          next
-        }
-        if(length(missMatchPositions$diffSeq1) < 5){
-          msg <- 'HLA alleles are very similar (fewer than 5 mismatch positions)! Keep that in mind when considering results.'
-          write.table(paste('\n', msg, '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
-          warning(msg)
-        }
-      }
-      
-      
-        
-      #load the normal and tumour for each type
-      #HLAtype 1 coverage
-      {
-        
-        HLA_A_type1normalLoc <- grep(pattern = HLA_A_type1, x = list.files(workDir, pattern = "normal.mpileup", full.names = TRUE), value = TRUE)
-        if(runWithNormal){
-          HLA_A_type1normal <- read.table(HLA_A_type1normalLoc ,sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
-        }
-        if(!runWithNormal){
-          HLA_A_type1normal <- data.frame(cbind(HLA_A_type1, 1:length(HLA_type1Fasta), toupper(HLA_type1Fasta), minCoverageFilter+1), stringsAsFactors=FALSE)
-          colnames(HLA_A_type1normal) <- paste('V',1:ncol(HLA_A_type1normal), sep = '')
-          HLA_A_type1normal$V4 <- as.numeric(HLA_A_type1normal$V4)
-        }
-        rownames(HLA_A_type1normal) <- HLA_A_type1normal$V2
-        HLA_A_type1tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type1,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
-        rownames(HLA_A_type1tumor) <- HLA_A_type1tumor$V2
-        
-        #apply minimum coverage thresholds (we only apply this to the normal for now)
-        HLA_A_type1normal <- HLA_A_type1normal[HLA_A_type1normal$V4>minCoverageFilter,,drop=FALSE]
-        
-        tmp <- intersect(rownames(HLA_A_type1tumor),rownames(HLA_A_type1normal))
-        HLA_A_type1tumor  <- HLA_A_type1tumor[tmp,,drop=FALSE]
-        # HLA_A_type1normal <- HLA_A_type1normal[tmp,,drop=FALSE]
-        
-        HLA_A_type1normalCov <- HLA_A_type1normal$V4#rep(0,max(HLA_A_type1normal$V2,HLA_A_type1tumor$V2))
-        names(HLA_A_type1normalCov) <- HLA_A_type1normal$V2 #1:length(HLA_A_type1tumorCov)
-        
-        HLA_A_type1tumorCov <- rep(0,length(HLA_A_type1normalCov))      
-        names(HLA_A_type1tumorCov) <- names(HLA_A_type1normalCov)
-        HLA_A_type1tumorCov[rownames(HLA_A_type1tumor)] <- HLA_A_type1tumor$V4
-        
-      }
-      
-      #HLAtype2 coverage
-      {
-        
-        HLA_A_type2normalLoc <- grep(pattern = HLA_A_type2, x = list.files(workDir, pattern = "normal.mpileup", full.names = TRUE), value = TRUE)
-        if(runWithNormal){
-          HLA_A_type2normal <- read.table(HLA_A_type2normalLoc ,sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
-        }
-        if(!runWithNormal){
-          HLA_A_type2normal <- data.frame(cbind(HLA_A_type2, 1:length(HLA_type2Fasta), toupper(HLA_type2Fasta), minCoverageFilter+1), stringsAsFactors=FALSE)
-          colnames(HLA_A_type2normal) <- paste('V',1:ncol(HLA_A_type2normal), sep = '')
-          HLA_A_type2normal$V4 <- as.numeric(HLA_A_type2normal$V4)
-        }
-        rownames(HLA_A_type2normal) <- HLA_A_type2normal$V2
-        HLA_A_type2tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type2,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
-        rownames(HLA_A_type2tumor) <- HLA_A_type2tumor$V2
-        
-        #apply minimum coverage thresholds (we only apply this to the normal for now)
-        HLA_A_type2normal <- HLA_A_type2normal[HLA_A_type2normal$V4>minCoverageFilter,,drop=FALSE]
 
-        tmp <- intersect(rownames(HLA_A_type2tumor),rownames(HLA_A_type2normal))
-        HLA_A_type2tumor  <- HLA_A_type2tumor[tmp,,drop=FALSE]
-        # HLA_A_type2normal <- HLA_A_type2normal[tmp,,drop=FALSE]
-        
-        HLA_A_type2normalCov <- HLA_A_type2normal$V4#rep(0,max(HLA_A_type2normal$V2,HLA_A_type2tumor$V2))
-        names(HLA_A_type2normalCov) <- HLA_A_type2normal$V2 #1:length(HLA_A_type2tumorCov)
-        
-        HLA_A_type2tumorCov <- rep(0,length(HLA_A_type2normalCov))      
-        names(HLA_A_type2tumorCov) <- names(HLA_A_type2normalCov)
-        HLA_A_type2tumorCov[rownames(HLA_A_type2tumor)] <- HLA_A_type2tumor$V4
-        
+      #perform local pairwise alignement
+      seq1 <- PasteVector(toupper(HLA_type1Fasta), sep="")
+      seq2 <- PasteVector(toupper(HLA_type2Fasta), sep="")
+      seqs <- c(PasteVector(toupper(HLA_type1Fasta), sep=""),
+                PasteVector(toupper(HLA_type2Fasta), sep=""))
+      sigma <- nucleotideSubstitutionMatrix(match = 2, mismatch = -1, 
+                                            baseOnly = TRUE)
+
+      tmp <- pairwiseAlignment(seqs[1], seqs[2],
+                               substitutionMatrix = sigma,
+                               gapOpening = -2,gapExtension = -4,
+                               scoreOnly = FALSE,type='local')
+
+      missMatchPositions <-
+        getMisMatchPositionsPairwiseAlignment(tmp,returnlist=TRUE)
+      if (length(missMatchPositions$diffSeq1) == 0) {
+        next
       }
+      if (length(missMatchPositions$diffSeq1) < 5) {
+        msg <- 'HLA alleles are very similar (fewer than 5 mismatch positions)! Keep that in mind when considering results.'
+        write.table(paste('\n', msg, '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+        warning(msg)
+      }
+
+      # load the normal and tumour for each type
+      # HLAtype 1 coverage
+      # save.image(file.path(ma_dir, 'tcga_lohhla', sprintf('%s_debug.rda', l_donor_id)))
+      # load(file.path(ma_dir, 'tcga_lohhla', sprintf('%s_debug.rda', 'TCGA-D3-A1Q3')))
+      # load(file.path(ma_dir, 'tcga_lohhla', sprintf('%s_debug.rda', 'TCGA-02-0047')))
+      HLA_A_type1normalLoc <- grep(pattern = HLA_A_type1,
+                                   x = list.files(workDir,
+                                                  pattern = 'normal\\.mpileup$',
+                                                  full.names = TRUE),
+                                   value = TRUE)
+      if (runWithNormal) {
+        HLA_A_type1normal <- read.table(HLA_A_type1normalLoc, sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      }
+      if (!runWithNormal){
+        HLA_A_type1normal <- data.frame(cbind(HLA_A_type1, 1:length(HLA_type1Fasta), toupper(HLA_type1Fasta), minCoverageFilter+1), stringsAsFactors=FALSE)
+        colnames(HLA_A_type1normal) <- paste('V',1:ncol(HLA_A_type1normal), sep = '')
+        HLA_A_type1normal$V4 <- as.numeric(HLA_A_type1normal$V4)
+      }
+      rownames(HLA_A_type1normal) <- HLA_A_type1normal$V2
+      HLA_A_type1tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type1,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      rownames(HLA_A_type1tumor) <- HLA_A_type1tumor$V2
+
+      #apply minimum coverage thresholds (we only apply this to the normal for now)
+      HLA_A_type1normal <- HLA_A_type1normal[HLA_A_type1normal$V4>minCoverageFilter,,drop=FALSE]
+
+      tmp <- intersect(rownames(HLA_A_type1tumor),rownames(HLA_A_type1normal))
+      HLA_A_type1tumor  <- HLA_A_type1tumor[tmp,,drop=FALSE]
+
+      HLA_A_type1normalCov <- HLA_A_type1normal$V4#rep(0,max(HLA_A_type1normal$V2,HLA_A_type1tumor$V2))
+      names(HLA_A_type1normalCov) <- HLA_A_type1normal$V2 #1:length(HLA_A_type1tumorCov)
+
+      HLA_A_type1tumorCov <- rep(0,length(HLA_A_type1normalCov))
+      names(HLA_A_type1tumorCov) <- names(HLA_A_type1normalCov)
+      HLA_A_type1tumorCov[rownames(HLA_A_type1tumor)] <- HLA_A_type1tumor$V4
+
+
+      #HLAtype2 coverage
+      HLA_A_type2normalLoc <- grep(pattern = HLA_A_type2, x = list.files(workDir, pattern = "normal.mpileup", full.names = TRUE), value = TRUE)
+      if (runWithNormal) {
+        HLA_A_type2normal <- read.table(HLA_A_type2normalLoc ,sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      }
+      if (!runWithNormal) {
+        HLA_A_type2normal <- data.frame(cbind(HLA_A_type2, 1:length(HLA_type2Fasta), toupper(HLA_type2Fasta), minCoverageFilter+1), stringsAsFactors=FALSE)
+        colnames(HLA_A_type2normal) <- paste('V',1:ncol(HLA_A_type2normal), sep = '')
+        HLA_A_type2normal$V4 <- as.numeric(HLA_A_type2normal$V4)
+      }
+      rownames(HLA_A_type2normal) <- HLA_A_type2normal$V2
+      HLA_A_type2tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type2,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      rownames(HLA_A_type2tumor) <- HLA_A_type2tumor$V2
+
+      #apply minimum coverage thresholds (we only apply this to the normal for now)
+      HLA_A_type2normal <- HLA_A_type2normal[HLA_A_type2normal$V4>minCoverageFilter,,drop=FALSE]
+
+      tmp <- intersect(rownames(HLA_A_type2tumor),rownames(HLA_A_type2normal))
+      HLA_A_type2tumor  <- HLA_A_type2tumor[tmp,,drop=FALSE]
+      # HLA_A_type2normal <- HLA_A_type2normal[tmp,,drop=FALSE]
+
+      HLA_A_type2normalCov <- HLA_A_type2normal$V4#rep(0,max(HLA_A_type2normal$V2,HLA_A_type2tumor$V2))
+      names(HLA_A_type2normalCov) <- HLA_A_type2normal$V2 #1:length(HLA_A_type2tumorCov)
+
+      HLA_A_type2tumorCov <- rep(0,length(HLA_A_type2normalCov))
+      names(HLA_A_type2tumorCov) <- names(HLA_A_type2normalCov)
+      HLA_A_type2tumorCov[rownames(HLA_A_type2tumor)] <- HLA_A_type2tumor$V4
 
       # catch issues with HLA coverage
       HLA_type1_ok <- length(names(HLA_A_type1normalCov)[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1])
       HLA_type2_ok <- length(names(HLA_A_type2normalCov)[names(HLA_A_type2normalCov)%in%missMatchPositions$diffSeq2])
-      if(nrow(HLA_A_type1normal) == 0 | nrow(HLA_A_type2normal) == 0){
+      if (nrow(HLA_A_type1normal) == 0 || nrow(HLA_A_type2normal) == 0) {
         msg <- paste('No position has greater than minimum coverage filter for ', HLA_gene, sep = '')
-        write.table(paste('\n', msg, '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
+        write.table(paste('\n', msg, '\n', sep = ''), file = log.name,
+                    quote = FALSE, row.names = FALSE, col.names = FALSE,
+                    append = TRUE)
         next
       }
-      if(HLA_type1_ok == 0 | HLA_type2_ok == 0){
+      if (HLA_type1_ok == 0 | HLA_type2_ok == 0) {
         msg <- paste('No mismatch position has greater than minimum coverage filter for ', HLA_gene, sep = '')
         write.table(paste('\n', msg, '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
         next
       }
-      if(HLA_type1_ok / HLA_type2_ok < 0.05){
+      if (HLA_type1_ok / HLA_type2_ok < 0.05) {
         msg <- paste('Check that the HLA type is correct for ', HLA_A_type1, '!', sep = '')
         write.table(paste('\n', msg, '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
         howToWarn(msg)
       }
-      if(HLA_type2_ok / HLA_type1_ok < 0.05){
+      if (HLA_type2_ok / HLA_type1_ok < 0.05) {
         msg <- paste('Check that the HLA type is correct for ', HLA_A_type2, '!', sep = '')
         write.table(paste('\n', msg, '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
         howToWarn(msg)
       }
-      
 
-      
-      if(extractNONmismatchReads%in%TRUE)
-      {
+      if (extractNONmismatchReads %in% TRUE) {
         #next, let's extract the reads that do not cover any mis-matches, and then mpileup them
         mismatchPosSeq1 <- HLA_A_type1tumor[HLA_A_type1tumor$V2%in%missMatchPositions$diffSeq1,,drop=FALSE]
         missMatchBed1    <- mismatchPosSeq1[,c(1,2,2)]
         missMatchBed1$V2 <- as.numeric(missMatchBed1$V2)-1
         missMatchBed1$V3 <- as.numeric(missMatchBed1$V2.1)+1
-        
+
         mismatchPosSeq2 <- HLA_A_type2tumor[HLA_A_type2tumor$V2%in%missMatchPositions$diffSeq2,,drop=FALSE]
         missMatchBed2    <- mismatchPosSeq2[,c(1,2,2)]
         missMatchBed2$V2 <- as.numeric(missMatchBed2$V2)-1
         missMatchBed2$V3 <- as.numeric(missMatchBed2$V2.1)+1
-        
+
         write.table(missMatchBed1,file=paste(workDir, '/', region,".",HLA_A_type1,".bed",sep=""),quote=FALSE,sep="\t",col.names=FALSE,row.names=FALSE)
         write.table(missMatchBed2,file=paste(workDir, '/', region,".",HLA_A_type2,".bed",sep=""),quote=FALSE,sep="\t",col.names=FALSE,row.names=FALSE)
-        
+
         #create the command (assume bedtools has been loaded)
         Type1TumorCmd <- paste("bedtools intersect -v -a ",workDir, '/', region,"/",region,".type.",HLA_A_type1,".filtered.bam"," -b ",workDir, '/', region,".",HLA_A_type1,".bed"," > ",workDir, '/', region,".",HLA_A_type1,".tumor.NoMissMatch.bam",sep="")
         system(Type1TumorCmd)
@@ -985,18 +1081,18 @@ for (region in regions)
           system(Type2NormalCmd)
         }
 
-        #next, let's do the mpileup step. 
-        MpilupType1TumorCmd <- paste("samtools mpileup ",workDir, '/', region,".",HLA_A_type1,".tumor.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type1,".tumor.NoMissMatch.pileup",sep="")
+        #next, let's do the mpileup step.
+        MpilupType1TumorCmd <- paste(samtools, " mpileup ",workDir, '/', region,".",HLA_A_type1,".tumor.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type1,".tumor.NoMissMatch.pileup",sep="")
         system(MpilupType1TumorCmd)
         if(runWithNormal){
-          MpilupType1NormalCmd <- paste("samtools mpileup ",workDir, '/', region,".",HLA_A_type1,".normal.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type1,".normal.NoMissMatch.pileup",sep="")
+          MpilupType1NormalCmd <- paste(samtools, " mpileup ",workDir, '/', region,".",HLA_A_type1,".normal.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type1,".normal.NoMissMatch.pileup",sep="")
           system(MpilupType1NormalCmd)
         }
 
-        MpilupType2TumorCmd <- paste("samtools mpileup ",workDir, '/', region,".",HLA_A_type2,".tumor.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type2,".tumor.NoMissMatch.pileup",sep="")
+        MpilupType2TumorCmd <- paste(samtools, " mpileup ",workDir, '/', region,".",HLA_A_type2,".tumor.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type2,".tumor.NoMissMatch.pileup",sep="")
         system(MpilupType2TumorCmd)
         if(runWithNormal){
-          MpilupType2NormalCmd <- paste("samtools mpileup ",workDir, '/', region,".",HLA_A_type2,".normal.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type2,".normal.NoMissMatch.pileup",sep="")
+          MpilupType2NormalCmd <- paste(samtools, " mpileup ",workDir, '/', region,".",HLA_A_type2,".normal.NoMissMatch.bam"," -f ", HLAfastaLoc, " > ",workDir, '/', region,".",HLA_A_type2,".normal.NoMissMatch.pileup",sep="")
           system(MpilupType2NormalCmd)
         }
 
@@ -1029,38 +1125,35 @@ for (region in regions)
           rownames(HLA_type1normal_nomissmatch) <- HLA_type1normal_nomissmatch$V2
           rownames(HLA_type2tumor_nomissmatch) <- HLA_type2tumor_nomissmatch$V2
           rownames(HLA_type2normal_nomissmatch) <- HLA_type2normal_nomissmatch$V2
-          
+
           #apply minimum coverage thresholds (we only apply this to the normal for now)
           HLA_type1normal_nomissmatch <- HLA_type1normal_nomissmatch[HLA_type1normal_nomissmatch$V4>minCoverageFilter,,drop=FALSE]
           HLA_type2normal_nomissmatch <- HLA_type2normal_nomissmatch[HLA_type2normal_nomissmatch$V4>minCoverageFilter,,drop=FALSE]
-          
+
           tmp <- intersect(rownames(HLA_type1tumor_nomissmatch),rownames(HLA_type1normal_nomissmatch))
           HLA_type1tumor_nomissmatch  <- HLA_type1tumor_nomissmatch[tmp,,drop=FALSE]
-          
+
           tmp <- intersect(rownames(HLA_type2tumor_nomissmatch),rownames(HLA_type2normal_nomissmatch))
           HLA_type2tumor_nomissmatch  <- HLA_type2tumor_nomissmatch[tmp,,drop=FALSE]
-          
+
           HLA_type2normal_nomissmatchCov <- HLA_type2normal_nomissmatch$V4
           names(HLA_type2normal_nomissmatchCov) <- HLA_type2normal_nomissmatch$V2
-          
+
           HLA_type1normal_nomissmatchCov <- HLA_type1normal_nomissmatch$V4
-          names(HLA_type1normal_nomissmatchCov) <- HLA_type1normal_nomissmatch$V2 
-          
-          HLA_type2tumor_nomissmatchCov <- rep(0,length(HLA_type2normal_nomissmatchCov))      
+          names(HLA_type1normal_nomissmatchCov) <- HLA_type1normal_nomissmatch$V2
+
+          HLA_type2tumor_nomissmatchCov <- rep(0,length(HLA_type2normal_nomissmatchCov))
           names(HLA_type2tumor_nomissmatchCov) <- names(HLA_type2normal_nomissmatchCov)
           HLA_type2tumor_nomissmatchCov[rownames(HLA_type2tumor_nomissmatch)] <- HLA_type2tumor_nomissmatch$V4
-          
-          HLA_type1tumor_nomissmatchCov <- rep(0,length(HLA_type1normal_nomissmatchCov))      
+
+          HLA_type1tumor_nomissmatchCov <- rep(0,length(HLA_type1normal_nomissmatchCov))
           names(HLA_type1tumor_nomissmatchCov) <- names(HLA_type1normal_nomissmatchCov)
           HLA_type1tumor_nomissmatchCov[rownames(HLA_type1tumor_nomissmatch)] <- HLA_type1tumor_nomissmatch$V4
-
         }
-        
       }
-      
+
 
       if(extractUniqueReads == TRUE) {
-        
         # use the same mismatch positions, already have the bed to get reads that do overlap a mismatch
         Type1TumorCmd <- paste("bedtools intersect -loj -bed -b ",workDir, '/', region,"/",region, ".type.",HLA_A_type1,".filtered.bam"," -a ",workDir, '/', region,".",HLA_A_type1,".bed"," > ",workDir, '/', region,".",HLA_A_type1,".tumor.mismatch.reads.bed",sep="")
         system(Type1TumorCmd)
@@ -1076,7 +1169,7 @@ for (region in regions)
           system(Type2NormalCmd)
         }
 
-        # only take unique reads 
+        # only take unique reads
         for(i in grep(pattern = HLA_gene, x = grep(pattern = region, x = list.files(workDir, pattern = 'mismatch.reads.bed', full.names = TRUE), value = TRUE), value = TRUE)){
           #print(i)
           if(file.size(i) > 0){
@@ -1088,12 +1181,12 @@ for (region in regions)
           }
           write.table(x, file = gsub(pattern = 'mismatch.reads.bed', replacement = 'mismatch.unique.reads.bed', x = i), sep = '\t', quote = FALSE, row.names = FALSE)
         }
-        
+
         HLA_A_type1normalCov_mismatch        <- HLA_A_type1normalCov[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1]
         HLA_A_type1normalCov_mismatch_unique <- HLA_A_type1normalCov_mismatch
         if(runWithNormal){
           HLA_A_type1normal_unique             <- read.table(paste(workDir, '/', region, '.', HLA_A_type1, '.normal.mismatch.unique.reads.bed', sep = ''), sep= '\t', header = TRUE, as.is = TRUE, comment.char = '')
-          HLA_A_type1normalCov_mismatch_unique <- sapply(X = names(HLA_A_type1normalCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type1normal_unique$V3)[x])} )  
+          HLA_A_type1normalCov_mismatch_unique <- sapply(X = names(HLA_A_type1normalCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type1normal_unique$V3)[x])} )
           names(HLA_A_type1normalCov_mismatch_unique) <- names(HLA_A_type1normalCov_mismatch)
           HLA_A_type1normalCov_mismatch_unique[is.na(HLA_A_type1normalCov_mismatch_unique)] <- 0
           if(length(HLA_A_type1normalCov_mismatch_unique) != 0){
@@ -1104,18 +1197,18 @@ for (region in regions)
         HLA_A_type1tumorCov_mismatch        <- HLA_A_type1tumorCov[names(HLA_A_type1tumorCov)%in%missMatchPositions$diffSeq1]
         HLA_A_type1tumor_unique             <- read.table(paste(workDir, '/', region, '.', HLA_A_type1, '.tumor.mismatch.unique.reads.bed', sep = ''), sep= '\t', header = TRUE, as.is = TRUE, comment.char = '')
         HLA_A_type1tumorCov_mismatch_unique <- HLA_A_type1tumorCov_mismatch
-        HLA_A_type1tumorCov_mismatch_unique <- sapply(X = names(HLA_A_type1tumorCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type1tumor_unique$V3)[x])} )  
+        HLA_A_type1tumorCov_mismatch_unique <- sapply(X = names(HLA_A_type1tumorCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type1tumor_unique$V3)[x])} )
         names(HLA_A_type1tumorCov_mismatch_unique) <- names(HLA_A_type1tumorCov_mismatch)
         HLA_A_type1tumorCov_mismatch_unique[is.na(HLA_A_type1tumorCov_mismatch_unique)] <- 0
         if(length(HLA_A_type1tumorCov_mismatch_unique) != 0){
           HLA_A_type1tumorCov_mismatch_unique <- HLA_A_type1tumorCov_mismatch_unique + 1
         }
-        
+
         HLA_A_type2normalCov_mismatch        <- HLA_A_type2normalCov[names(HLA_A_type2normalCov)%in%missMatchPositions$diffSeq2]
         HLA_A_type2normalCov_mismatch_unique <- HLA_A_type2normalCov_mismatch
         if(runWithNormal){
           HLA_A_type2normal_unique             <- read.table(paste(workDir, '/', region, '.', HLA_A_type2, '.normal.mismatch.unique.reads.bed', sep = ''), sep= '\t', header = TRUE, as.is = TRUE, comment.char = '')
-          HLA_A_type2normalCov_mismatch_unique <- sapply(X = names(HLA_A_type2normalCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type2normal_unique$V3)[x])} )  
+          HLA_A_type2normalCov_mismatch_unique <- sapply(X = names(HLA_A_type2normalCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type2normal_unique$V3)[x])} )
           names(HLA_A_type2normalCov_mismatch_unique) <- names(HLA_A_type2normalCov_mismatch)
           HLA_A_type2normalCov_mismatch_unique[is.na(HLA_A_type2normalCov_mismatch_unique)] <- 0
           if(length(HLA_A_type2normalCov_mismatch_unique) != 0){
@@ -1126,44 +1219,40 @@ for (region in regions)
         HLA_A_type2tumorCov_mismatch        <- HLA_A_type2tumorCov[names(HLA_A_type2tumorCov)%in%missMatchPositions$diffSeq2]
         HLA_A_type2tumor_unique             <- read.table(paste(workDir, '/', region, '.', HLA_A_type2, '.tumor.mismatch.unique.reads.bed', sep = ''), sep= '\t', header = TRUE, as.is = TRUE, comment.char = '')
         HLA_A_type2tumorCov_mismatch_unique <- HLA_A_type2tumorCov_mismatch
-        HLA_A_type2tumorCov_mismatch_unique <- sapply(X = names(HLA_A_type2tumorCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type2tumor_unique$V3)[x])} )  
+        HLA_A_type2tumorCov_mismatch_unique <- sapply(X = names(HLA_A_type2tumorCov_mismatch_unique), FUN = function(x) {return(table(HLA_A_type2tumor_unique$V3)[x])} )
         names(HLA_A_type2tumorCov_mismatch_unique) <- names(HLA_A_type2tumorCov_mismatch)
         HLA_A_type2tumorCov_mismatch_unique[is.na(HLA_A_type2tumorCov_mismatch_unique)] <- 0
         if(length(HLA_A_type2tumorCov_mismatch_unique) != 0){
           HLA_A_type2tumorCov_mismatch_unique <- HLA_A_type2tumorCov_mismatch_unique + 1
         }
-      
       }
 
-
-
-      if(performIntegerCopyNum)
-      {
-        performIntegerCopyNumTmp   <- performIntegerCopyNum
-        copyNumSolutions           <- read.table(CopyNumLoc,sep="\t",header=TRUE,stringsAsFactors=FALSE)
-        if(!'tumorPurity'%in%colnames(copyNumSolutions)|!'tumorPloidy'%in%colnames(copyNumSolutions))
-        {
+      if (performIntegerCopyNum) {
+        performIntegerCopyNumTmp <- performIntegerCopyNum
+        copyNumSolutions <- read.table(CopyNumLoc, header = TRUE,
+                                       stringsAsFactors = FALSE)
+        if (!'tumorPurity' %in% colnames(copyNumSolutions) ||
+            !'tumorPloidy'%in%colnames(copyNumSolutions)) {
           howToWarn(paste('column names tumorPloidy and tumorPurity are needed within',CopyNumLoc,' if you wish to perform integer copy number',sep=""))
           performIntegerCopyNumTmp <- FALSE
         }
 
-        if(!region %in% rownames(copyNumSolutions)){
-          howToWarn(paste('row names of ',CopyNumLoc,' must match region (sample) names if you wish to perform integer copy number\nskipping region: ', region,sep="")) 
+        if (!region %in% rownames(copyNumSolutions)){
+          howToWarn(paste('row names of ',CopyNumLoc,' must match region (sample) names if you wish to perform integer copy number\nskipping region: ', region,sep=""))
           performIntegerCopyNumTmp <- FALSE
         }
-        
-        if(performIntegerCopyNumTmp){
+
+        if (performIntegerCopyNumTmp) {
           tumorPloidy                <- copyNumSolutions[region,'tumorPloidy']
           tumorPurity                <- copyNumSolutions[region,'tumorPurity']
         }
 
-        if(!performIntegerCopyNumTmp){
+        if (!performIntegerCopyNumTmp) {
           tumorPloidy                <- NA
           tumorPurity                <- NA
         }
-
       }
-         
+
       # infer copy number using combined BAF and logR
       misMatchCoveredInBoth <- cbind(ifelse(missMatchPositions$diffSeq1%in%names(HLA_A_type1normalCov),1,0),ifelse(missMatchPositions$diffSeq2%in%names(HLA_A_type2normalCov),1,0))
       missMatchseq1 <- missMatchPositions$diffSeq1[rowSums(misMatchCoveredInBoth)==2]
@@ -1174,11 +1263,9 @@ for (region in regions)
       endChar   <- max(c(as.numeric(names(HLA_A_type1tumorCov))),as.numeric(names(HLA_A_type2tumorCov)))
       seqToConsider <- seq(startChar,endChar,by=binSize)
       seqToConsider <- c(seqToConsider[-length(seqToConsider)],endChar+1)
-      
+
       binLogR       <- c()
-      for (i in 1:(length(seqToConsider)-1))
-      {
-        
+      for (i in 1:(length(seqToConsider)-1)) {
         PotentialSites   <- as.character(seqToConsider[i]:seqToConsider[i+1])
         combinedBinTumor  <- median(as.numeric(as.numeric(HLA_A_type1tumorCov[names(HLA_A_type1tumorCov)%in%PotentialSites])), na.rm = TRUE)+median(as.numeric(as.numeric(HLA_A_type2tumorCov[names(HLA_A_type2tumorCov)%in%PotentialSites])), na.rm = TRUE)
         combinedBinNormal <- median(as.numeric(as.numeric(HLA_A_type1normalCov[names(HLA_A_type1normalCov)%in%PotentialSites])), na.rm= TRUE)+median(as.numeric(as.numeric(HLA_A_type2normalCov[names(HLA_A_type2normalCov)%in%PotentialSites])), na.rm = TRUE)
@@ -1199,31 +1286,31 @@ for (region in regions)
                      ,HLA_A_type2normalCov[as.character(missMatchseq2)]
                      )
       colnames(tmpOut_cn) <- c('missMatchseq1','logR_type1','TumorCov_type1','missMatchseq2','logR_type2','TumorCov_type2','NormalCov_type1','NormalCov_type2')
-    
-      
+
+
       dup1   <- unique(tmpOut_cn[duplicated(tmpOut_cn[,1]),1])
       dup2   <- unique(tmpOut_cn[duplicated(tmpOut_cn[,4]),4])
-      
+
       for(duplicationIn1 in dup1)
       {
         tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'TumorCov_type2']  <- mean(tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'TumorCov_type2'])
-        tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'NormalCov_type2'] <- mean(tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'NormalCov_type2'])  
-        tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'logR_type2']      <- mean(tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'logR_type2'])  
+        tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'NormalCov_type2'] <- mean(tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'NormalCov_type2'])
+        tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'logR_type2']      <- mean(tmpOut_cn[tmpOut_cn[,1]==duplicationIn1,'logR_type2'])
       }
-      
+
       for(duplicationIn2 in dup2)
       {
         tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'TumorCov_type1']  <- mean(tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'TumorCov_type1'])
-        tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'NormalCov_type1'] <- mean(tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'NormalCov_type1'])  
-        tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'logR_type1']      <- mean(tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'logR_type1'])   
+        tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'NormalCov_type1'] <- mean(tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'NormalCov_type1'])
+        tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'logR_type1']      <- mean(tmpOut_cn[tmpOut_cn[,4]==duplicationIn2,'logR_type1'])
       }
-      
+
       tmpOut_cn  <- tmpOut_cn[!duplicated(tmpOut_cn[,1]),,drop=FALSE]
       tmpOut_cn  <- tmpOut_cn[!duplicated(tmpOut_cn[,4]),,drop=FALSE]
       colnames(tmpOut_cn) <- c('missMatchseq1','logR_type1','TumorCov_type1','missMatchseq2','logR_type2','TumorCov_type2','NormalCov_type1','NormalCov_type2')
 
 
-      combinedTable <- data.frame(tmpOut_cn,stringsAsFactors=FALSE)
+      combinedTable <- data.frame(tmpOut_cn, stringsAsFactors = FALSE)
       combinedTable$logRcombined <- log2(((combinedTable$TumorCov_type1+combinedTable$TumorCov_type2)/(combinedTable$NormalCov_type1+combinedTable$NormalCov_type2))*MultFactor)
       combinedTable$BAFcombined  <- combinedTable$TumorCov_type1/(combinedTable$TumorCov_type1+combinedTable$TumorCov_type2)
 
@@ -1249,7 +1336,7 @@ for (region in regions)
         combinedTable$binlogRtype2    <- numeric(0)
         combinedTable$binNum          <- numeric(0)
       }
-      
+
       rawVals <- funCalcN_withBAF(combinedTable$logRcombined,combinedTable$BAFcombined,tumorPloidy,tumorPurity,gamma)
       combinedTable$nAcombined <- rawVals[,1]
       combinedTable$nBcombined <- rawVals[,2]
@@ -1258,32 +1345,32 @@ for (region in regions)
       nB_rawVal_withBAF_conf   <- t.test.NA(combinedTable$nBcombined)
       nB_rawVal_withBAF_lower  <- nB_rawVal_withBAF_conf$conf.int[1]
       nB_rawVal_withBAF_upper  <- nB_rawVal_withBAF_conf$conf.int[2]
-      
+
       nA_rawVal_withBAF        <- median(combinedTable$nAcombined, na.rm = TRUE)
       nA_rawVal_withBAF_conf   <- t.test.NA(combinedTable$nAcombined)
       nA_rawVal_withBAF_lower  <- nA_rawVal_withBAF_conf$conf.int[1]
       nA_rawVal_withBAF_upper  <- nA_rawVal_withBAF_conf$conf.int[2]
-      
+
       rawValsBin      <- funCalcN_withBAF(combinedTable$binlogRCombined,combinedTable$BAFcombined,tumorPloidy,tumorPurity,gamma)
       combinedTable$nAcombinedBin <- rawValsBin[,1]
       combinedTable$nBcombinedBin <- rawValsBin[,2]
-      
+
       nB_rawVal_withBAF           <- median(combinedTable$nBcombined, na.rm = TRUE)
       nB_rawVal_withBAF_conf      <- t.test.NA(combinedTable$nBcombined)
       nB_rawVal_withBAF_lower     <- nB_rawVal_withBAF_conf$conf.int[1]
       nB_rawVal_withBAF_upper     <- nB_rawVal_withBAF_conf$conf.int[2]
-      
+
       nA_rawVal_withBAF           <- median(combinedTable$nAcombined, na.rm = TRUE)
       nA_rawVal_withBAF_conf      <- t.test.NA(combinedTable$nAcombined)
       nA_rawVal_withBAF_lower     <- nA_rawVal_withBAF_conf$conf.int[1]
       nA_rawVal_withBAF_upper     <- nA_rawVal_withBAF_conf$conf.int[2]
-      
+
       #let's only count non duplicates
       nB_rawVal_withBAF_bin       <- median(combinedTable[!duplicated(combinedTable$binNum),]$nBcombinedBin, na.rm = TRUE)
       nB_rawVal_withBAF_bin_conf  <- t.test.NA(combinedTable[!duplicated(combinedTable$binNum),]$nBcombinedBin)
       nB_rawVal_withBAF_bin_lower <-nB_rawVal_withBAF_bin_conf$conf.int[1]
       nB_rawVal_withBAF_bin_upper <-nB_rawVal_withBAF_bin_conf$conf.int[2]
-      
+
       nA_rawVal_withBAF_bin       <- median(combinedTable[!duplicated(combinedTable$binNum),]$nAcombinedBin, na.rm = TRUE)
       nA_rawVal_withBAF_bin_conf  <- t.test.NA(combinedTable[!duplicated(combinedTable$binNum),]$nAcombinedBin)
       nA_rawVal_withBAF_bin_lower <- nA_rawVal_withBAF_bin_conf$conf.int[1]
@@ -1299,19 +1386,19 @@ for (region in regions)
       nB_rawVal_withoutBAF_conf <- t.test.NA(combinedTable$nBsep)
       nB_rawVal_withoutBAF_lower <- nB_rawVal_withoutBAF_conf$conf.int[1]
       nB_rawVal_withoutBAF_upper <- nB_rawVal_withoutBAF_conf$conf.int[2]
-  
+
       nA_rawVal_withoutBAF <- median(combinedTable$nAsep, na.rm = TRUE)
 
       nA_rawVal_withoutBAF_conf <- t.test.NA(combinedTable$nAsep)
       nA_rawVal_withoutBAF_lower <- nA_rawVal_withoutBAF_conf$conf.int[1]
       nA_rawVal_withoutBAF_upper <- nA_rawVal_withoutBAF_conf$conf.int[2]
-      
+
       nB_rawVal_withoutBAFBin <-  median(combinedTable[!duplicated(combinedTable$binNum),]$nBsepBin, na.rm = TRUE)
       nB_rawVal_withoutBAFBin_conf <-  t.test.NA(combinedTable[!duplicated(combinedTable$binNum),]$nBsepBin)
       nB_rawVal_withoutBAFBin_lower <- nB_rawVal_withoutBAFBin_conf$conf.int[1]
       nB_rawVal_withoutBAFBin_upper <- nB_rawVal_withoutBAFBin_conf$conf.int[2]
-      
-      
+
+
       nA_rawVal_withoutBAFBin <-  median(combinedTable[!duplicated(combinedTable$binNum),]$nAsepBin, na.rm = TRUE)
       nA_rawVal_withoutBAFBin_conf <-  t.test.NA(combinedTable[!duplicated(combinedTable$binNum),]$nAsepBin)
       nA_rawVal_withoutBAFBin_lower <- nA_rawVal_withoutBAFBin_conf$conf.int[1]
@@ -1319,32 +1406,32 @@ for (region in regions)
 
       # we can also predict the BAF from our logR
       combinedTable$expectedBAF <- (1-tumorPurity+tumorPurity*combinedTable$nAsep)/(2-2*tumorPurity+tumorPurity*(combinedTable$nAsep+combinedTable$nBsep))
-    
+
 
 
       # t tests of coverage
       misMatchCoveredInBoth <- cbind(ifelse(missMatchPositions$diffSeq1%in%names(HLA_A_type1normalCov),1,0),ifelse(missMatchPositions$diffSeq2%in%names(HLA_A_type2normalCov),1,0))
       missMatchseq1 <- missMatchPositions$diffSeq1[rowSums(misMatchCoveredInBoth)==2]
       missMatchseq2 <- missMatchPositions$diffSeq2[rowSums(misMatchCoveredInBoth)==2]
-      
+
       # we don't want to count the same miss-match multiple times - let's take an average where this is the case
       tmpOut <- cbind(missMatchseq1,log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov+0.0001)*MultFactor)[as.character(missMatchseq1)],missMatchseq2,log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov+0.0001)*MultFactor)[as.character(missMatchseq2)])
       dup1   <- unique(tmpOut[duplicated(tmpOut[,1]),1])
       dup2   <- unique(tmpOut[duplicated(tmpOut[,3]),3])
-      
+
       for(duplicationIn1 in dup1)
       {
         tmpOut[tmpOut[,1]==duplicationIn1,4] <- median(tmpOut[tmpOut[,1]==duplicationIn1,4])
       }
-      
+
       for(duplicationIn2 in dup2)
       {
-        tmpOut[tmpOut[,3]==duplicationIn2,2] <- median(tmpOut[tmpOut[,3]==duplicationIn2,2])  
+        tmpOut[tmpOut[,3]==duplicationIn2,2] <- median(tmpOut[tmpOut[,3]==duplicationIn2,2])
       }
-      
+
       tmpOut  <- tmpOut[!duplicated(tmpOut[,1]),,drop=FALSE]
       tmpOut  <- tmpOut[!duplicated(tmpOut[,3]),,drop=FALSE]
-      
+
       if(nrow(tmpOut) > 1){
         PairedTtest <- t.test(tmpOut[,2],tmpOut[,4],paired=TRUE)
         UnPairedTtest <- t.test(tmpOut[,2],tmpOut[,4],paired=FALSE)
@@ -1355,28 +1442,28 @@ for (region in regions)
 
 
 
-      # t-test of mismatch sites without counting the same read twice      
+      # t-test of mismatch sites without counting the same read twice
       if(!any(c(length(HLA_A_type1tumorCov_mismatch_unique), length(HLA_A_type2tumorCov_mismatch_unique)) == 0)){
-        
+
         tmpOut_unique <- cbind(missMatchseq1,log2(c(HLA_A_type1tumorCov_mismatch_unique/HLA_A_type1normalCov_mismatch_unique + 0.0001)*MultFactor)[as.character(missMatchseq1)],missMatchseq2,log2(c(HLA_A_type2tumorCov_mismatch_unique/HLA_A_type2normalCov_mismatch_unique+0.0001)*MultFactor)[as.character(missMatchseq2)])
         dup1_unique   <- unique(tmpOut_unique[duplicated(tmpOut_unique[,1]),1])
         dup2_unique   <- unique(tmpOut_unique[duplicated(tmpOut_unique[,3]),3])
-        
+
         for(duplicationIn1 in dup1_unique)
         {
           tmpOut_unique[tmpOut_unique[,1]==duplicationIn1,4] <- median(tmpOut_unique[tmpOut_unique[,1]==duplicationIn1,4])
-          
+
         }
-        
+
         for(duplicationIn2 in dup2_unique)
         {
           tmpOut_unique[tmpOut_unique[,3]==duplicationIn2,2] <- median(tmpOut_unique[tmpOut_unique[,3]==duplicationIn2,2])
-          
+
         }
-        
+
         tmpOut_unique  <- tmpOut_unique[!duplicated(tmpOut_unique[,1]),,drop=FALSE]
         tmpOut_unique  <- tmpOut_unique[!duplicated(tmpOut_unique[,3]),,drop=FALSE]
-        
+
         if(nrow(tmpOut_unique) > 1){
           PairedTtest_unique <- t.test(tmpOut_unique[,2],tmpOut_unique[,4],paired=TRUE)
           UnPairedTtest_unique <- t.test(tmpOut_unique[,2],tmpOut_unique[,4],paired=FALSE)
@@ -1384,7 +1471,7 @@ for (region in regions)
           PairedTtest_unique <- list(p.value = NA)
           UnPairedTtest_unique <- list(p.value = NA)
         }
-        
+
       } else{
         PairedTtest_unique <- list(p.value = NA)
         UnPairedTtest_unique <- list(p.value = NA)
@@ -1406,22 +1493,22 @@ for (region in regions)
       numMisMatchSitesCov        <- length(which(rowSums(misMatchCoveredInBoth)==2))
       tmp                        <- length(which(sort(log(c(HLA_A_type1tumorCov/HLA_A_type1normalCov),2)[as.character(missMatchseq1)]-log(c(HLA_A_type2tumorCov/HLA_A_type2normalCov),2)[as.character(missMatchseq2)])>0))/length(missMatchseq2)
       propSupportiveSites        <- max(tmp,1-tmp)*100
-      
+
 
 
       # let's have a look at the additional features we can add in relation to integer copy numbers
       HLA_type1copyNum_withoutBAF          <- NA
       HLA_type1copyNum_withoutBAF_lower    <- NA
       HLA_type1copyNum_withoutBAF_upper    <- NA
-      
+
       HLA_type1copyNum_withBAF             <- NA
       HLA_type1copyNum_withBAF_lower       <- NA
       HLA_type1copyNum_withBAF_upper       <- NA
-      
+
       HLA_type2copyNum_withoutBAF          <- NA
       HLA_type2copyNum_withoutBAF_lower    <- NA
       HLA_type2copyNum_withoutBAF_upper    <- NA
-      
+
       HLA_type2copyNum_withBAF             <- NA
       HLA_type2copyNum_withBAF_lower       <- NA
       HLA_type2copyNum_withBAF_upper       <- NA
@@ -1429,33 +1516,33 @@ for (region in regions)
       HLA_type1copyNum_withoutBAFBin       <- NA
       HLA_type1copyNum_withoutBAFBin_lower <- NA
       HLA_type1copyNum_withoutBAFBin_upper <- NA
-      
+
       HLA_type1copyNum_withBAFBin          <- NA
       HLA_type1copyNum_withBAFBin_lower    <- NA
       HLA_type1copyNum_withBAFBin_upper    <- NA
-      
+
       HLA_type2copyNum_withoutBAFBin       <- NA
       HLA_type2copyNum_withoutBAFBin_lower <- NA
       HLA_type2copyNum_withoutBAFBin_upper <- NA
-      
+
       HLA_type2copyNum_withBAFBin          <- NA
       HLA_type2copyNum_withBAFBin_lower    <- NA
       HLA_type2copyNum_withBAFBin_upper    <- NA
-      
+
       if(performIntegerCopyNum)
       {
         HLA_type1copyNum_withoutBAF          <- nA_rawVal_withoutBAF
         HLA_type1copyNum_withoutBAF_lower    <- nA_rawVal_withoutBAF_lower
         HLA_type1copyNum_withoutBAF_upper    <- nA_rawVal_withoutBAF_upper
-        
+
         HLA_type1copyNum_withBAF             <- nA_rawVal_withBAF
         HLA_type1copyNum_withBAF_lower       <- nA_rawVal_withBAF_lower
         HLA_type1copyNum_withBAF_upper       <- nA_rawVal_withBAF_upper
-        
+
         HLA_type2copyNum_withoutBAF          <- nB_rawVal_withoutBAF
         HLA_type2copyNum_withoutBAF_lower    <- nB_rawVal_withoutBAF_lower
         HLA_type2copyNum_withoutBAF_upper    <- nB_rawVal_withoutBAF_upper
-        
+
         HLA_type2copyNum_withBAF             <- nB_rawVal_withBAF
         HLA_type2copyNum_withBAF_lower       <- nB_rawVal_withBAF_lower
         HLA_type2copyNum_withBAF_upper       <- nB_rawVal_withBAF_upper
@@ -1463,22 +1550,22 @@ for (region in regions)
         HLA_type1copyNum_withoutBAFBin       <- nA_rawVal_withoutBAFBin
         HLA_type1copyNum_withoutBAFBin_lower <- nA_rawVal_withoutBAFBin_lower
         HLA_type1copyNum_withoutBAFBin_upper <- nA_rawVal_withoutBAFBin_upper
-        
+
         HLA_type1copyNum_withBAFBin          <- nA_rawVal_withBAF_bin
         HLA_type1copyNum_withBAFBin_lower    <- nA_rawVal_withBAF_bin_lower
         HLA_type1copyNum_withBAFBin_upper    <- nA_rawVal_withBAF_bin_upper
-        
+
         HLA_type2copyNum_withoutBAFBin       <- nB_rawVal_withoutBAFBin
         HLA_type2copyNum_withoutBAFBin_lower <- nB_rawVal_withoutBAFBin_lower
         HLA_type2copyNum_withoutBAFBin_upper <- nB_rawVal_withoutBAFBin_upper
-        
+
         HLA_type2copyNum_withBAFBin          <- nB_rawVal_withBAF_bin
         HLA_type2copyNum_withBAFBin_lower    <- nB_rawVal_withBAF_bin_lower
         HLA_type2copyNum_withBAFBin_upper    <- nB_rawVal_withBAF_bin_upper
       }
-      
-      
-      
+
+
+
       out <- cbind(HLA_A_type1,HLA_A_type2,HLAtype1Log2MedianCoverage,HLAtype2Log2MedianCoverage,HLAtype1Log2MedianCoverageAtSites,HLAtype2Log2MedianCoverageAtSites
                    ,HLA_type1copyNum_withoutBAF
                    ,HLA_type1copyNum_withoutBAF_lower
@@ -1504,7 +1591,7 @@ for (region in regions)
                    ,HLA_type2copyNum_withBAFBin
                    ,HLA_type2copyNum_withBAFBin_lower
                    ,HLA_type2copyNum_withBAFBin_upper
-                   ,PVal,UnPairedPval,PVal_unique,UnPairedPval_unique,LossAllele,KeptAllele,numMisMatchSitesCov,propSupportiveSites) 
+                   ,PVal,UnPairedPval,PVal_unique,UnPairedPval_unique,LossAllele,KeptAllele,numMisMatchSitesCov,propSupportiveSites)
       HLAoutPut <- rbind(HLAoutPut,out)
 
       regionSpecOutPut <- cbind(region,HLAoutPut)
@@ -1515,9 +1602,6 @@ for (region in regions)
 
     }
   }
-
-
-
 
   #plotting
   if(plottingStep)
@@ -1575,18 +1659,19 @@ for (region in regions)
 
       # some things to plot if there is a normal sample
       if(runWithNormal){
-
         # rolling mean
+        tryCatch({
         par(mfrow=c(2,1))
         par(mar=c(2,5,2,2))
         barplot(c(rollmean(HLA_A_type2tumorCov*MultFactor,min(500, length(HLA_A_type2tumorCov)))/rollmean(HLA_A_type2normalCov,min(500, length(HLA_A_type2normalCov)))),ylim=c(0,3),xaxt='n',main=HLA_A_type2,las=1, ylab = 'Tumor/Normal Coverage')
         abline(h=1,lty='dashed',col='blue',lwd=1.5)
         barplot(c(rollmean(HLA_A_type1tumorCov*MultFactor,min(500, length(HLA_A_type1tumorCov)))/rollmean(HLA_A_type1normalCov,min(500, length(HLA_A_type1normalCov)))),ylim=c(0,3),xaxt='n',main=HLA_A_type1,las=1, ylab = 'Tumor/Normal Coverage')
         abline(h=1,lty='dashed',col='blue',lwd=1.5)
+        }, error = function(e) return(NULL))
 
-        
           
         # log ratio and density of mismatches
+        tryCatch({
         par(mfrow=c(1,1))
         par(mar=c(5,5,5,2))
         plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2,HLA_A_type2tumor$V2,HLA_A_type1tumor$V2))
@@ -1628,10 +1713,12 @@ for (region in regions)
         
         legend('topright', legend = c(HLA_A_type2,HLA_A_type1) , 
                lty=1, col=c('#3182bd99', '#de2d2699'), bty='n', cex=1,lwd=3)
+        }, error = function(e) return(NULL))
 
 
 
         
+        tryCatch({
         # normal coverage comparison
         plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2))
              ,ylim=c(0, max(HLA_A_type1normalCov, HLA_A_type2normalCov)),col='#3182bd99',pch=16
@@ -1665,9 +1752,11 @@ for (region in regions)
         
         points(c(HLA_A_type1normal$V2)[HLA_A_type1normal$V2%in%missMatchPositions$diffSeq1],c(HLA_A_type1normalCov)[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1],col='#de2d26',pch=16)
         points(c(HLA_A_type2normal$V2)[HLA_A_type2normal$V2%in%missMatchPositions$diffSeq2],c(HLA_A_type2normalCov)[names(HLA_A_type2normalCov)%in%missMatchPositions$diffSeq2],col='#3182bd',pch=16)
+        }, error = function(e) return(NULL))
         
         
 
+        tryCatch({
         # tumor and normal coverage for allele 1
         plot(names(HLA_A_type1normalCov),apply(cbind(HLA_A_type1tumorCov*MultFactor,HLA_A_type1normalCov),1,max),type='n',xlab='HLA genomic position',ylab='Coverage',las=1,main=HLA_A_type1,ylim=c(0,max(c(HLA_A_type1tumorCov,HLA_A_type1normalCov))))
         if(length(HLAtype1exons)!=0)
@@ -1684,9 +1773,11 @@ for (region in regions)
                lty=1, col=c('#3182bd', '#9ecae1'), bty='n', cex=1,lwd=3)
         
         points(c(HLA_A_type1normal$V2)[HLA_A_type1normal$V2%in%missMatchPositions$diffSeq1],c(HLA_A_type1tumorCov*MultFactor)[names(HLA_A_type1tumorCov)%in%missMatchPositions$diffSeq1],col='#3182bd',pch=16)
+        }, error = function(e) return(NULL))
         
         
         
+        tryCatch({
         # tumor and normal coverage for allele 2
         plot(c(HLA_A_type2normal$V2),apply(cbind(HLA_A_type2tumorCov*MultFactor,HLA_A_type2normalCov),1,max),type='n',xlab='HLA genomic position',ylab='Coverage',las=1,main=HLA_A_type2,ylim=c(0,max(c(HLA_A_type2tumorCov,HLA_A_type2normalCov))))
         if(length(HLAtype2exons)!=0)
@@ -1703,9 +1794,11 @@ for (region in regions)
                lty=1, col=c('#3182bd', '#9ecae1'), bty='n', cex=1,lwd=3)
         # points(c(HLA_A_type2normal$V2)[HLA_A_type2tumor$V2%in%missMatchPositions$diffSeq2],c(HLA_A_type2tumorCov)[names(HLA_A_type2tumorCov)%in%missMatchPositions$diffSeq2],col='#3182bd',pch=16)
         points(c(HLA_A_type2normal$V2)[HLA_A_type2normal$V2%in%missMatchPositions$diffSeq2],c(HLA_A_type2tumorCov*MultFactor)[names(HLA_A_type2tumorCov*MultFactor)%in%missMatchPositions$diffSeq2],col='#3182bd',pch=16)
+        }, error = function(e) return(NULL))
         
         
 
+        tryCatch({
         #let's now just plot the mismatch positions
         plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2,HLA_A_type2tumor$V2,HLA_A_type1tumor$V2)),ylim=c(-2,2),col='#3182bd99',pch=16
              ,xlab='HLA genomic position'
@@ -1716,6 +1809,7 @@ for (region in regions)
         points(c(HLA_A_type2normal$V2)[names(HLA_A_type2normalCov)%in%missMatchPositions$diffSeq2],log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov)%in%missMatchPositions$diffSeq2],col='#3182bd99',pch=16,cex=1)
         points(c(HLA_A_type1normal$V2)[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1],log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1],col='#de2d2699',pch=16,cex=1)
         abline(h=0,lty='dashed')
+        }, error = function(e) return(NULL))
       
       }
 
@@ -1723,6 +1817,7 @@ for (region in regions)
 
       # fewer things to plot if there's not a normal sample
       if(!runWithNormal){
+        tryCatch({
         par(mfrow=c(2,1))
         par(mar=c(2,5,2,2))
         Ymax <- max(c(HLA_A_type1tumorCov,HLA_A_type2tumorCov))+100
@@ -1733,8 +1828,10 @@ for (region in regions)
         barplot(c(rollmean(HLA_A_type2tumorCov,150)),ylim=c(0,Ymax),xaxt='n',main=HLA_A_type2,las=1,col='#3182bd',border='#3182bd50')
         abline(h=median(HLA_A_type1tumorCov),lty='dashed',col='#de2d26',lwd=1.5, na.rm = TRUE)
         abline(h=median(HLA_A_type2tumorCov),lty='dashed',col='#3182bd',lwd=1.5, na.rm = TRUE)
+        }, error = function(e) return(NULL))
         
 
+        tryCatch({
         par(mfrow=c(1,1))
         par(mar=c(5,5,5,2))
         plot(c(1:max(c(HLA_A_type1tumor$V2,HLA_A_type2tumor$V2)))
@@ -1754,8 +1851,10 @@ for (region in regions)
         
         legend('topleft', legend = c(HLA_A_type2,HLA_A_type1) , 
                lty=1, col=c('#3182bd99', '#de2d2699'), bty='n', cex=1,lwd=3)
+        }, error = function(e) return(NULL))
         
         
+        tryCatch({
         plot(c(1:max(c(HLA_A_type2tumor$V2,HLA_A_type1tumor$V2)))
              ,ylim=c(0,Ymax),col='#3182bd99',pch=16
              ,xlab='HLA genomic position'
@@ -1769,6 +1868,7 @@ for (region in regions)
         
         legend('topleft', legend = c(HLA_A_type2,HLA_A_type1) , 
                lty=1, col=c('#3182bd99', '#de2d2699'), bty='n', cex=1,lwd=3)
+        }, error = function(e) return(NULL))
 
       }
       
@@ -1777,6 +1877,7 @@ for (region in regions)
       #next, let's plot the predicted integer copy numbers 
       if(!is.na(tumorPurity) & nrow(combinedTable) != 0){
         
+        tryCatch({
         plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2,HLA_A_type2tumor$V2,HLA_A_type1tumor$V2)),ylim=c(-0.5,max(round(c(combinedTable$nBcombined,combinedTable$nAcombined)), na.rm = TRUE)+1),col='#3182bd99',pch=16
              ,xlab='HLA genomic position'
              ,ylab='Copy Number'
@@ -1826,6 +1927,7 @@ for (region in regions)
           legend('topleft', legend = c(HLA_A_type2,HLA_A_type1) , 
                  lty=1, col=c('#3182bd', '#de2d26'), bty='n', cex=1,lwd=3)
         }
+        }, error = function(e) return(NULL))
 
       }
           
@@ -1833,6 +1935,7 @@ for (region in regions)
 
         if(!useLogRbin)
         {
+          tryCatch({
           plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2,HLA_A_type2tumor$V2,HLA_A_type1tumor$V2)),ylim=c(-0.5,max(round(c(combinedTable$nAsep,combinedTable$nBsep)), na.rm = TRUE)+1),col='#3182bd99',pch=16
                ,xlab='HLA genomic position'
                ,ylab='Copy Number'
@@ -1866,11 +1969,13 @@ for (region in regions)
           
           legend('topleft', legend = c(HLA_A_type2,HLA_A_type1) , 
                  lty=1, col=c('#3182bd', '#de2d26'), bty='n', cex=1,lwd=3)
+          }, error = function(e) return(NULL))
           
         }
         
         if(useLogRbin)
         {
+          tryCatch({
           plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2,HLA_A_type2tumor$V2,HLA_A_type1tumor$V2)),ylim=c(-0.5,max(round(c(combinedTable$nAsep,combinedTable$nBsep)), na.rm = TRUE)+1),col='#3182bd99',pch=16
                ,xlab='HLA genomic position'
                ,ylab='Copy Number'
@@ -1904,12 +2009,10 @@ for (region in regions)
           
           legend('topleft', legend = c(HLA_A_type2,HLA_A_type1) , 
                  lty=1, col=c('#3182bd', '#de2d26'), bty='n', cex=1,lwd=3)
+          }, error = function(e) return(NULL))
           
         }
-
       }
-      
-      
       
       # t-test plot
       par(mfrow=c(1,2))
@@ -1917,36 +2020,54 @@ for (region in regions)
       
       if(nrow(tmpOut) > 0){
         if(runWithNormal){
+          tryCatch({
           boxplot(tmpOut[,2],tmpOut[,4],col=c('#de2d2699','#3182bd99'),boxwex=0.2,ylim=c(-2,2),names=c(HLA_A_type1,HLA_A_type2),las=1,main=paste('Paired t.test p.val=',signif(PairedTtest$p.value,3)),ylab=('logR ratio'))
+          }, error = function(e) return(NULL))
         }
         if(!runWithNormal){
+          tryCatch({
           boxplot(tmpOut[,2],tmpOut[,4],col=c('#de2d2699','#3182bd99'),boxwex=0.2,names=c(HLA_A_type1,HLA_A_type2),las=1,main=paste('Paired t.test p.val=',signif(PairedTtest$p.value,3)),ylab=('Coverage'))
+          }, error = function(e) return(NULL))
         }
+
+        tryCatch({
         beeswarm(tmpOut[,2],col=c('#de2d2699'),add=TRUE,corral = 'wrap',method='swarm',corralWidth=0.25,pch=16,at=1,cex=1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
         beeswarm(tmpOut[,4],col=c('#3182bd99'),add=TRUE,corral = 'wrap',method='swarm',corralWidth=0.25,pch=16,at=2,cex=1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
         barplot(sort(c(tmpOut[,2]-tmpOut[,4])),horiz = TRUE,yaxt='n',col=ifelse(sort(c(tmpOut[,2]-tmpOut[,4]))>0,'#de2d26','#3182bd'),border=FALSE,main='Paired Differences in logR')
+        }, error = function(e) return(NULL))
       }
-      
-      
       
       # t-test of mismatch sites without counting the same read twice      
       if(nrow(tmpOut_unique) > 0){
         if(runWithNormal){
+          tryCatch({
           boxplot(tmpOut_unique[,2],tmpOut_unique[,4],col=c('#de2d2699','#3182bd99'),boxwex=0.2,ylim=c(-10,10),names=c(HLA_A_type1,HLA_A_type2),las=1,main=paste('Paired t.test p.val=',signif(PairedTtest_unique$p.value,3)),ylab=('"logR ratio"'))
+          }, error = function(e) return(NULL))
         }
         if(!runWithNormal){
+          tryCatch({
           boxplot(tmpOut_unique[,2],tmpOut_unique[,4],col=c('#de2d2699','#3182bd99'),boxwex=0.2,names=c(HLA_A_type1,HLA_A_type2),las=1,main=paste('Paired t.test p.val=',signif(PairedTtest_unique$p.value,3)),ylab=('"Coverage"'))       
+          }, error = function(e) return(NULL))
         }
+        tryCatch({
         beeswarm(tmpOut_unique[,2],col=c('#de2d2699'),add=TRUE,corral = 'wrap',method='swarm',corralWidth=0.25,pch=16,at=1,cex=1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
         beeswarm(tmpOut_unique[,4],col=c('#3182bd99'),add=TRUE,corral = 'wrap',method='swarm',corralWidth=0.25,pch=16,at=2,cex=1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
         barplot(sort(c(tmpOut_unique[,2]-tmpOut_unique[,4])),horiz = TRUE,yaxt='n',col=ifelse(sort(c(tmpOut_unique[,2]-tmpOut_unique[,4]))>0,'#de2d26','#3182bd'),border=FALSE,main='Paired Differences in logR')
+        }, error = function(e) return(NULL))
       }
-
-
 
       # compare tumor / normal coverage site-wise
       # probably not a necessary plot
-      if(!any(c(length(HLA_A_type1tumorCov_mismatch_unique), length(HLA_A_type2tumorCov_mismatch_unique)) == 0)){
+      if (!any(c(length(HLA_A_type1tumorCov_mismatch_unique), length(HLA_A_type2tumorCov_mismatch_unique)) == 0)) {
+        tryCatch({
         par(mfrow = c(2,2))
         tmpOut2        <- cbind(missMatchseq1,MultFactor*HLA_A_type1tumorCov[as.character(missMatchseq1)],HLA_A_type1normalCov[as.character(missMatchseq1)],missMatchseq2,MultFactor*HLA_A_type2tumorCov[as.character(missMatchseq2)], HLA_A_type2normalCov[as.character(missMatchseq2)])
         tmpOut_unique2 <- cbind(missMatchseq1,MultFactor*HLA_A_type1tumorCov_mismatch_unique[as.character(missMatchseq1)],HLA_A_type1normalCov_mismatch_unique[as.character(missMatchseq1)],missMatchseq2,MultFactor*HLA_A_type2tumorCov_mismatch_unique[as.character(missMatchseq2)], HLA_A_type2normalCov_mismatch_unique[as.character(missMatchseq2)])
@@ -1975,26 +2096,35 @@ for (region in regions)
         tmpOut2  <- tmpOut2[!duplicated(tmpOut2[,4]),,drop=FALSE]    
         tmpOut_unique2  <- tmpOut_unique2[!duplicated(tmpOut_unique2[,1]),,drop=FALSE]
         tmpOut_unique2  <- tmpOut_unique2[!duplicated(tmpOut_unique2[,4]),,drop=FALSE]
+        }, error = function(e) return(NULL))
 
         if(nrow(tmpOut2) > 0){
+          tryCatch({
           plot(tmpOut2[,3], tmpOut2[,2], xlab = 'normal coverage', ylab = 'tumor coverage', pch = 16, col = '#de2d2699', main = HLA_A_type1)
           abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
+          tryCatch({
           plot(tmpOut2[,6], tmpOut2[,5], xlab = 'normal coverage', ylab = 'tumor coverage', pch = 16, col = '#3182bd99', main = HLA_A_type2)
           abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
 
         }
         if(nrow(tmpOut_unique2) > 0){
+          tryCatch({
           plot(tmpOut_unique2[,3], tmpOut_unique2[,2], xlab = 'normal unique coverage', ylab = 'tumor unique coverage', pch = 16, col = '#de2d2699', main = HLA_A_type1)
           abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
+          tryCatch({
           plot(tmpOut_unique2[,6], tmpOut_unique2[,5], xlab = 'normal unique coverage', ylab = 'tumor unique coverage', pch = 16, col = '#3182bd99', main = HLA_A_type2)
           abline(a = 0, b = 1)
-        
+          }, error = function(e) return(NULL))
         }
       }
 
 
       if(runWithNormal){
         # rolling mean log tumor/normal
+        tryCatch({
         par(mfrow=c(1,1))
         par(mar=c(5,5,5,2))
         plot(c(log2(rollmean(HLA_A_type2tumorCov,min(500, length(HLA_A_type2tumorCov)))/rollmean(HLA_A_type2normalCov,min(500, length(HLA_A_type2normalCov)))*MultFactor)),ylim=c(-2,2),col='#3182bd',pch=16
@@ -2005,12 +2135,14 @@ for (region in regions)
         points(c(log2(rollmean(HLA_A_type1tumorCov,min(500, length(HLA_A_type1tumorCov)))/rollmean(HLA_A_type1normalCov,min(500, length(HLA_A_type1normalCov)))*MultFactor)),col='#de2d26',pch=16,cex=0.75)
         legend('bottomright', legend = c(HLA_A_type2,HLA_A_type1) , 
                lty=1, col=c('#3182bd99', '#de2d2699'), bty='n', cex=1,lwd=3)
+        }, error = function(e) return(NULL))
         
         
         
         # 
         if(extractNONmismatchReads==TRUE)
         {
+          tryCatch({
           plot(c(1:max(HLA_A_type1normal$V2,HLA_A_type2normal$V2,HLA_A_type2tumor$V2,HLA_A_type1tumor$V2)),ylim=c(-2,2),col='#3182bd99',pch=16
                ,xlab='HLA genomic position'
                ,ylab='Log Ratio'
@@ -2023,10 +2155,12 @@ for (region in regions)
           
           points(c(HLA_type2normal_nomissmatch$V2),log2(c(HLA_type2tumor_nomissmatchCov/HLA_type2normal_nomissmatchCov)*MultFactor),col='#3182bd99',pch=16,cex=1)
           points(c(HLA_type1normal_nomissmatch$V2),log2(c(HLA_type1tumor_nomissmatchCov/HLA_type1normal_nomissmatchCov)*MultFactor),col='#de2d2699',pch=16,cex=1)
+          }, error = function(e) return(NULL))
           
           
           
           # comparing mismatch sites to non-mismatch sites
+          tryCatch({
           par(mfrow=c(1,2))
           par(mar=c(5,5,5,2))
           
@@ -2039,6 +2173,7 @@ for (region in regions)
             Ttest <- t.test(log(c((HLA_type1tumor_nomissmatchCov+0.01)/HLA_type1normal_nomissmatchCov)*MultFactor,2),log(c((HLA_A_type1tumorCov+0.01)/HLA_A_type1normalCov)*MultFactor,2)[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1])
             boxplot(log(c((HLA_type1tumor_nomissmatchCov+0.01)/HLA_type1normal_nomissmatchCov)*MultFactor,2),log(c((HLA_A_type1tumorCov+0.01)/HLA_A_type1normalCov)*MultFactor,2)[names(HLA_A_type1normalCov)%in%missMatchPositions$diffSeq1],col=c('#de2d2699','#3182bd99'),boxwex=0.2,ylim=c(-2,2),names=c('No mismatch reads','Mismatch reads'),las=1,main=paste(HLA_A_type1,'\n t.test p.val=',signif(Ttest$p.value,3)),ylab=('logR ratio'),xlab='coverage from')
           }   
+          }, error = function(e) return(NULL))
         }
       }
     }     
@@ -2049,21 +2184,16 @@ for (region in regions)
 
 
 # write the output
-HLAoutLoc <- paste(workDir, '/', full.patient,'.',minCoverageFilter,".DNA.HLAlossPrediction_CI.xls",sep="")
+HLAoutLoc <- paste(workDir, '/', full.patient,'.',minCoverageFilter,".DNA.HLAlossPrediction_CI.tsv",sep="")
 write.table(PatientOutPut,file=HLAoutLoc,sep="\t",quote=FALSE,col.names=TRUE,row.names=FALSE)
 
-if(performIntegerCopyNum)
-{
-  HLABAFsummaryLoc <- paste(workDir, '/', full.patient,'.', minCoverageFilter,".DNA.IntegerCPN_CI.xls",sep="")
+if(performIntegerCopyNum) {
+  HLABAFsummaryLoc <- paste(workDir, '/', full.patient,'.', minCoverageFilter,".DNA.IntegerCPN_CI.tsv",sep="")
   write.table(combinedTable,file=HLABAFsummaryLoc,sep="\t",quote=FALSE,col.names=TRUE,row.names=FALSE)
 }
 
-
-
 # and clean up tmp files
-if(cleanUp)
-{
-
+if (cleanUp) {
   cmd <- paste('rm ', workDir, '/', '*tumor*', sep = '')
   system(cmd)
 
@@ -2096,9 +2226,4 @@ if(cleanUp)
 
   cmd <- paste('rm ', workDir, '/', '*/*type*[0-9].bam.bai', sep = '')
   system(cmd)
-
 }
-
-
-
-
