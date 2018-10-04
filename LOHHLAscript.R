@@ -760,6 +760,12 @@ if (mapping.step) {
 
     # fished reads
     if (fishing.step) {
+	fishing.step = !file.exists(paste(regionDir,"/fished.2.fastq", sep = ''))
+        if (!fishing.step) {
+	  print("I'm not fishing!")
+	}
+    }
+    if (fishing.step) {
       write.table(paste('\nget partially matching reads and turn fished sam into fastq at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
       get.partially.matching.reads(workDir, regionDir, BAMDir, BAMfile)
       write.table(paste('\ncombine chr6 reads with fished reads at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
@@ -779,9 +785,9 @@ if (mapping.step) {
                        '.patient.hlaFasta.nix', ' -f ',
                        regionDir, "/", BAMid,".chr6region.1.fastq", ' ',
                        regionDir, "/", BAMid,".chr6region.2.fastq", 
-                       ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW 1',
+                       ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW',
                        ' -c ', NOVOThreads,
-                       ' > ', regionDir, '/', BAMid, 
+                       ' 1> ', regionDir, '/', BAMid,
                        '.chr6region.patient.reference.hlas.sam ', 
                        '2> ', regionDir, '/', BAMid,
                        '_BS_GL.chr6region.patient.reference.hlas.metrics')
