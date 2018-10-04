@@ -188,7 +188,7 @@ if (CopyNumLoc == 'FALSE') {
   performIntegerCopyNum <- FALSE
   useLogRbin            <- FALSE
 }
-override                <- ifelse(overrideDir == "TRUE", yes = FALSE, no = TRUE)
+override                <- ifelse(overrideDir == "FALSE", yes = FALSE, no = TRUE)
 gamma                   <- 1
 binSize                 <- 150
 
@@ -868,7 +868,7 @@ for (region in regions) {
                             grep('type', list.files(regionDir), value=TRUE), 
                             value=TRUE)
 
-  if (paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile) {
+  if (grepl(normalBAMfile, paste(BAMDir, '/', region, '.bam', sep = ''))) {
     type <- 'normal'
   } else {
     type <- 'tumor'
@@ -931,7 +931,7 @@ if (runWithNormal) {
 PatientOutPut <- c()
 
 for (region in regions) {
-  if (paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile) {
+  if (grepl(normalBAMfile, paste(BAMDir, '/', region, '.bam', sep = ''))) {
     next
   }
   if (runWithNormal) {
@@ -1007,6 +1007,9 @@ for (region in regions) {
                                                   pattern = 'normal\\.mpileup$',
                                                   full.names = TRUE),
                                    value = TRUE)
+      if (length(HLA_A_type1normalLoc) == 0) {
+	print(paste(HLA_A_type1, workDir))
+      }
       if (runWithNormal) {
         HLA_A_type1normal <- read.table(HLA_A_type1normalLoc, sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
       }
