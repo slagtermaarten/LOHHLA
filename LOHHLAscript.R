@@ -236,6 +236,7 @@ PasteVector <- function(v, sep="") {
 
 
 create.kmer.file <- function(workDir, kmerSize, HLAfastaLoc) {
+  
   setwd(workDir)
   cmd <- paste(jellyfish, ' count -m ', kmerSize, ' -s 100M -t 5 ', HLAfastaLoc, sep = '')
   system(cmd)
@@ -310,6 +311,7 @@ count.events <- function(BAMfile, n) {
     return(total)
   })
   misMatchCount <- editDistance - indelTotals
+  # misMatchCount <- as.numeric(editDistance) - as.numeric(indelTotals)
   eventCount <- misMatchCount + insertionCount + deletionCount
   names(eventCount) <- 1:length(eventCount)
   passed     <- eventCount[which(eventCount <= n)]
@@ -409,9 +411,13 @@ getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
 
     for (BAM in c(tumorBAMfile, normalBAMfile)) {
       region <- unlist(strsplit(BAM, split = '/')) %>% { .[length(.)] }
-      cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', outDir, 
-                    region, '.proc.flagstat')
-      system(cmd)
+      flagstat <- paste0(outDir, region, '.proc.flagstat')
+      cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', flagstat)
+      if (file.exists(flagstat)) {
+        print(paste(flagstat, "already exists, skipping."))
+      } else {
+        system(cmd)
+      }
     }
   } else {
     outDir <- overrideDir
@@ -612,6 +618,25 @@ if (length(hlaAlleles) == 0) {
   stop('No suitable HLA alleles!')
 }
 
+if (mapping.step){
+  all_exist <- TRUE;
+  for(BAMfile in BAMfiles){
+    BAMid <- unlist(strsplit(BAMfile, split = '.bam'))[1]
+    regionDir <- paste(workDir, '/', BAMid, sep = '')
+    for (allele in hlaAlleles) {
+      bai <- paste0(regionDir,"/",BAMid,".type.",allele, ".filtered.bam.bai")
+      if (all_exist && !file.exists(bai)) {
+	all_exist <- FALSE;
+      }
+    }
+  }
+  mapping.step <- !all_exist;
+  if (!mapping.step) {
+    print("Observed all allele .filtered.bam.bai files, so I assume the mapping step is already done! SKIPPING!");
+  }
+}
+
+
 if (mapping.step) {
   # generate patient reference fasta
   write.table(paste('\ngenerate patient reference fasta at ', date(), '\n', 
@@ -635,7 +660,13 @@ if (mapping.step) {
   write.table(novoindexCMD, file = log.name, quote = FALSE, row.names = FALSE,
               col.names = FALSE, append = TRUE)
   system(novoindexCMD)
-
+  if(fishing.step) {
+    fish <- paste0(regionDir,"/fished.2.fastq")
+    fishing.step <- !file.exists(fish)
+    if (!fishing.step) {
+      print(paste(fish, "already exists, skipping."))
+    }
+  }
   if (fishing.step) {
     write.table(paste('\ncreate kmer file at ', date(), '\n', sep = ''), 
                 file = log.name, quote = FALSE, row.names = FALSE, 
@@ -861,7 +892,11 @@ for (region in regions) {
 
     write.table(cmd, file = log.name, quote = FALSE, row.names = FALSE,
                 col.names = FALSE, append = TRUE)
-    system(cmd)
+    if (file.exists(mpileupFile)) {
+      print(paste(mpileupFile, "already exists, skipping."));
+    } else {
+      system(cmd)
+    }
   }
 }
 
