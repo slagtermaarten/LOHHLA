@@ -736,17 +736,23 @@ if (mapping.step) {
     }
 
     # TODO account for variable presence of chr prefix here?
-    # Automatically infer names of alternate loci?
     if (genomeAssembly == 'hg19') {
-      for (chrom_name in c('chr6_apd_hap1', 'chr6_cox_hap2', 'chr6_dbb_hap3',
-                           'chr6_mann_hap4', 'chr6_mcf_hap5', 'chr6_qbl_hap6',
-                           'chr6_ssto_hap7')) {
-        samtoolsCMD <- paste0(samtools, " view ", BAMfile_full, " ", chrom_name, 
-                              " >> ",regionDir, "/", BAMid, ".chr6region.sam") 
-        write.table(samtoolsCMD, file = log.name, quote = FALSE, 
-                    row.names = FALSE, col.names = FALSE, append = TRUE)
-        system(samtoolsCMD)
+      alt_loci_names <- c('chr6_apd_hap1', 'chr6_cox_hap2', 'chr6_dbb_hap3',
+        'chr6_mann_hap4', 'chr6_mcf_hap5', 'chr6_qbl_hap6', 'chr6_ssto_hap7')
       }
+    } else if (genomeAssembly == 'grch38') {
+      alt_loci_names <- c( 'GL000250.2', 'GL000251.2', 'GL000252.2',
+        'GL000253.2', 'GL000254.2',  'GL000255.2', 'GL000256.2',  'KI270758.1',
+        'NT_167244.2', 'NT_113891.3', 'NT_167245.2', 'NT_167246.2',
+        'NT_167247.2', 'NT_167248.2', 'NT_167249.2', 'NT_187692.1')
+    }
+
+    for (chrom_name in alt_loci_names) {
+      samtoolsCMD <- paste0(samtools, " view ", BAMfile_full, " ", chrom_name, 
+                            " >> ",regionDir, "/", BAMid, ".chr6region.sam") 
+      write.table(samtoolsCMD, file = log.name, quote = FALSE, 
+                  row.names = FALSE, col.names = FALSE, append = TRUE)
+      system(samtoolsCMD)
     }
 
     # turn into fastq -- this step has an error with unpaired mates, but seems
