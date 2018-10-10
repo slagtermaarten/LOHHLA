@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # before running
 # ml BEDTools/2.26.0-foss-2016b
 # ml SAMtools/1.3.1-foss-2016b
@@ -48,7 +49,7 @@ if (!interactive()) {
                 help="remove temporary files [default= %default]", metavar="character"),
     make_option(c("-no", "--novoDir"), type="character", default='',
                 help="path to novoalign executable [default= %default]", metavar="character"),
-    make_option(c("-na", "--novoThreads"), type="integer", default=as.integer(system('nproc', intern = T)),
+    make_option(c("-na", "--novoThreads"), type="integer", default=min(as.integer(system('nproc', intern = T)), 8),
                 help="amount of threads to be used by novoalign [default= %default]", metavar="character"),
     make_option(c("-ga", "--gatkDir"), type="character", default='',
                 help="path to GATK executable [default= %default]", metavar="character"),
@@ -135,7 +136,7 @@ numMisMatch       <- opt$numMisMatch
 mapping.step      <- opt$mappingStep
 cleanUp           <- opt$cleanUp
 NOVODir           <- opt$novoDir
-NOVOThreads       <- opt$NOVOThreads
+NOVOThreads       <- opt$novoThreads
 GATKDir           <- opt$gatkDir
 HLAexonLoc        <- opt$HLAexonLoc
 kmerSize          <- opt$kmerSize
@@ -187,7 +188,7 @@ if (CopyNumLoc == 'FALSE') {
   performIntegerCopyNum <- FALSE
   useLogRbin            <- FALSE
 }
-override                <- overrideDir == TRUE, yes = FALSE, no = TRUE)
+override                <- ifelse(overrideDir == "FALSE", yes = FALSE, no = TRUE)
 gamma                   <- 1
 binSize                 <- 150
 
@@ -235,6 +236,7 @@ PasteVector <- function(v, sep="") {
 
 
 create.kmer.file <- function(workDir, kmerSize, HLAfastaLoc) {
+  
   setwd(workDir)
   cmd <- paste(jellyfish, ' count -m ', kmerSize, ' -s 100M -t 5 ', HLAfastaLoc, sep = '')
   system(cmd)
@@ -309,6 +311,7 @@ count.events <- function(BAMfile, n) {
     return(total)
   })
   misMatchCount <- editDistance - indelTotals
+  # misMatchCount <- as.numeric(editDistance) - as.numeric(indelTotals)
   eventCount <- misMatchCount + insertionCount + deletionCount
   names(eventCount) <- 1:length(eventCount)
   passed     <- eventCount[which(eventCount <= n)]
@@ -408,9 +411,13 @@ getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
 
     for (BAM in c(tumorBAMfile, normalBAMfile)) {
       region <- unlist(strsplit(BAM, split = '/')) %>% { .[length(.)] }
-      cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', outDir, 
-                    region, '.proc.flagstat')
-      system(cmd)
+      flagstat <- paste0(outDir, region, '.proc.flagstat')
+      cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', flagstat)
+      if (file.exists(flagstat)) {
+        print(paste(flagstat, "already exists, skipping."))
+      } else {
+        system(cmd)
+      }
     }
   } else {
     outDir <- overrideDir
@@ -611,6 +618,25 @@ if (length(hlaAlleles) == 0) {
   stop('No suitable HLA alleles!')
 }
 
+if (mapping.step){
+  all_exist <- TRUE;
+  for(BAMfile in BAMfiles){
+    BAMid <- unlist(strsplit(BAMfile, split = '.bam'))[1]
+    regionDir <- paste(workDir, '/', BAMid, sep = '')
+    for (allele in hlaAlleles) {
+      bai <- paste0(regionDir,"/",BAMid,".type.",allele, ".filtered.bam.bai")
+      if (all_exist && !file.exists(bai)) {
+	all_exist <- FALSE;
+      }
+    }
+  }
+  mapping.step <- !all_exist;
+  if (!mapping.step) {
+    print("Observed all allele .filtered.bam.bai files, so I assume the mapping step is already done! SKIPPING!");
+  }
+}
+
+
 if (mapping.step) {
   # generate patient reference fasta
   write.table(paste('\ngenerate patient reference fasta at ', date(), '\n', 
@@ -634,7 +660,13 @@ if (mapping.step) {
   write.table(novoindexCMD, file = log.name, quote = FALSE, row.names = FALSE,
               col.names = FALSE, append = TRUE)
   system(novoindexCMD)
-
+  if(fishing.step) {
+    fish <- paste0(regionDir,"/fished.2.fastq")
+    fishing.step <- !file.exists(fish)
+    if (!fishing.step) {
+      print(paste(fish, "already exists, skipping."))
+    }
+  }
   if (fishing.step) {
     write.table(paste('\ncreate kmer file at ', date(), '\n', sep = ''), 
                 file = log.name, quote = FALSE, row.names = FALSE, 
@@ -728,6 +760,12 @@ if (mapping.step) {
 
     # fished reads
     if (fishing.step) {
+	fishing.step = !file.exists(paste(regionDir,"/fished.2.fastq", sep = ''))
+        if (!fishing.step) {
+	  print("I'm not fishing!")
+	}
+    }
+    if (fishing.step) {
       write.table(paste('\nget partially matching reads and turn fished sam into fastq at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
       get.partially.matching.reads(workDir, regionDir, BAMDir, BAMfile)
       write.table(paste('\ncombine chr6 reads with fished reads at ', date(), '\n', sep = ''), file = log.name, quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
@@ -747,9 +785,9 @@ if (mapping.step) {
                        '.patient.hlaFasta.nix', ' -f ',
                        regionDir, "/", BAMid,".chr6region.1.fastq", ' ',
                        regionDir, "/", BAMid,".chr6region.2.fastq", 
-                       ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW 1',
+                       ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW',
                        ' -c ', NOVOThreads,
-                       ' > ', regionDir, '/', BAMid, 
+                       ' 1> ', regionDir, '/', BAMid,
                        '.chr6region.patient.reference.hlas.sam ', 
                        '2> ', regionDir, '/', BAMid,
                        '_BS_GL.chr6region.patient.reference.hlas.metrics')
@@ -836,7 +874,7 @@ for (region in regions) {
                             grep('type', list.files(regionDir), value=TRUE), 
                             value=TRUE)
 
-  if (paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile) {
+  if (grepl(normalBAMfile, paste(BAMDir, '/', region, '.bam', sep = ''))) {
     type <- 'normal'
   } else {
     type <- 'tumor'
@@ -860,7 +898,11 @@ for (region in regions) {
 
     write.table(cmd, file = log.name, quote = FALSE, row.names = FALSE,
                 col.names = FALSE, append = TRUE)
-    system(cmd)
+    if (file.exists(mpileupFile)) {
+      print(paste(mpileupFile, "already exists, skipping."));
+    } else {
+      system(cmd)
+    }
   }
 }
 
@@ -895,7 +937,7 @@ if (runWithNormal) {
 PatientOutPut <- c()
 
 for (region in regions) {
-  if (paste(BAMDir, '/', region, '.bam', sep = '') == normalBAMfile) {
+  if (grepl(normalBAMfile, paste(BAMDir, '/', region, '.bam', sep = ''))) {
     next
   }
   if (runWithNormal) {
@@ -971,6 +1013,9 @@ for (region in regions) {
                                                   pattern = 'normal\\.mpileup$',
                                                   full.names = TRUE),
                                    value = TRUE)
+      if (length(HLA_A_type1normalLoc) == 0) {
+	print(paste(HLA_A_type1, workDir))
+      }
       if (runWithNormal) {
         HLA_A_type1normal <- read.table(HLA_A_type1normalLoc, sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
       }
@@ -980,7 +1025,8 @@ for (region in regions) {
         HLA_A_type1normal$V4 <- as.numeric(HLA_A_type1normal$V4)
       }
       rownames(HLA_A_type1normal) <- HLA_A_type1normal$V2
-      HLA_A_type1tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type1,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      tumpile <- paste0(workDir, "/",region,".",HLA_A_type1,".","tumor.mpileup")
+      HLA_A_type1tumor  <- read.table(tumpile,sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE,col.names=paste0("V",c(1:6)))
       rownames(HLA_A_type1tumor) <- HLA_A_type1tumor$V2
 
       #apply minimum coverage thresholds (we only apply this to the normal for now)
@@ -1008,7 +1054,7 @@ for (region in regions) {
         HLA_A_type2normal$V4 <- as.numeric(HLA_A_type2normal$V4)
       }
       rownames(HLA_A_type2normal) <- HLA_A_type2normal$V2
-      HLA_A_type2tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type2,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE)
+      HLA_A_type2tumor  <- read.table(paste(workDir, "/",region,".",HLA_A_type2,".","tumor.mpileup",sep=""),sep="\t",stringsAsFactors=FALSE,quote="",fill=TRUE,col.names=paste0("V",c(1:6)))
       rownames(HLA_A_type2tumor) <- HLA_A_type2tumor$V2
 
       #apply minimum coverage thresholds (we only apply this to the normal for now)

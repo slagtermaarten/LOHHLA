@@ -33,6 +33,8 @@ Within R, the following packages are required:
 * beeswarm (https://CRAN.R-project.org/package=beeswarm)
 * zoo (https://cran.r-project.org/package=zoo)
 * Rsamtools (http://bioconductor.org/packages/release/bioc/html/Rsamtools.html)
+* dplyr (install.packages("dplyr"))
+* naturalsort (install.packages("naturalsort"))
 
 LOHHLA also requires an HLA fasta file. This can be obtained from Polysolver (http://archive.broadinstitute.org/cancer/cga/polysolver)
 
