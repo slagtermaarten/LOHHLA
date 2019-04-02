@@ -1,19 +1,31 @@
+This is a fork of the original LOHHLA repository by Maarten Slagter, PhD student at the 
+Netherlands Cancer Institute. Edits are intended to facilitate usage and interpretation of 
+the program and make it more robust to various problems, while keeping the core 
+functionality intact.
+
 # README #
 
-Immune evasion is a hallmark of cancer. Losing the ability to present productive tumor neoantigens could facilitate evasion from immune predation. 
-An integral part of neoantigen presentation is the HLA class I molecule, which presents epitopes to T-cells on the cell surface. Thus, loss of an 
-HLA allele, resulting in HLA homozygosity, may be a mechanism of immune escape. However, the polymorphic nature of the HLA locus precludes accurate
-copy number calling using conventional copy number tools.  
+Immune evasion is a hallmark of cancer. Losing the ability to present productive tumor 
+neoantigens could facilitate evasion from immune predation.  An integral part of 
+neoantigen presentation is the HLA class I molecule, which presents epitopes to T-cells on 
+the cell surface. Thus, loss of an HLA allele, resulting in HLA homozygosity, may be 
+a mechanism of immune escape. However, the polymorphic nature of the HLA locus precludes 
+accurate copy number calling using conventional copy number tools.  
 
-Here, we present **LOHHLA**, **L**oss **O**f **H**eterozygosity in **H**uman **L**eukocyte **A**ntigen, a computational tool to evaluate HLA loss 
-using next-generation sequencing data. 
+Here, we present **LOHHLA**, **L**oss **O**f **H**eterozygosity in **H**uman **L**eukocyte 
+**A**ntigen, a computational tool to evaluate HLA loss using next-generation sequencing 
+data. 
 
 ### LICENCE ###
 
-LOHHLA IS PROTECTED BY COPYRIGHT AND IS SUBJECT TO A PATENT APPLICATION.  THE TOOL IS PROVIDED “AS IS” FOR INTERNAL NON-COMMERCIAL ACADEMIC RESEARCH PURPOSES ONLY.   
-NO RESPONSIBILITY IS ACCEPTED FOR ANY LIABILITY ARISING FROM SUCH USE BY ANY THIRD PARTY.  COMMERCIAL USE OF THIS TOOL FOR ANY PURPOSE IS NOT PERMITTED.  
-ALL COMMERCIAL USE OF THE TOOL INCLUDING TRANSFER TO A COMMERCIAL THIRD PARTY OR USE ON BEHALF OF A COMMERCIAL THIRD PARTY (INCLUDING BUT NOT LIMITED TO USE AS 
-PART OF A SERVICE SUPPLIED TO ANY THIRD PARTY FOR FINANCIAL REWARD) REQUIRES A LICENSE.  FOR FURTHER INFORMATION PLEASE EMAIL Eileen Clark <eileen.clark@crick.ac.uk>.
+LOHHLA IS PROTECTED BY COPYRIGHT AND IS SUBJECT TO A PATENT APPLICATION.  THE TOOL IS 
+PROVIDED “AS IS” FOR INTERNAL NON-COMMERCIAL ACADEMIC RESEARCH PURPOSES ONLY.   NO 
+RESPONSIBILITY IS ACCEPTED FOR ANY LIABILITY ARISING FROM SUCH USE BY ANY THIRD PARTY.  
+COMMERCIAL USE OF THIS TOOL FOR ANY PURPOSE IS NOT PERMITTED.  ALL COMMERCIAL USE OF THE 
+TOOL INCLUDING TRANSFER TO A COMMERCIAL THIRD PARTY OR USE ON BEHALF OF A COMMERCIAL THIRD 
+PARTY (INCLUDING BUT NOT LIMITED TO USE AS PART OF A SERVICE SUPPLIED TO ANY THIRD PARTY 
+FOR FINANCIAL REWARD) REQUIRES A LICENSE.  FOR FURTHER INFORMATION PLEASE EMAIL Eileen 
+Clark <eileen.clark@crick.ac.uk>.
  
  
 ### What do I need to install to run LOHHLA? ###
@@ -36,7 +48,10 @@ Within R, the following packages are required:
 * dplyr (install.packages("dplyr"))
 * naturalsort (install.packages("naturalsort"))
 
-LOHHLA also requires an HLA fasta file. This can be obtained from Polysolver (http://archive.broadinstitute.org/cancer/cga/polysolver)
+If not available locally, these packages will be attempted to be installed.
+
+LOHHLA also requires an HLA fasta file. This can be obtained from Polysolver 
+(http://archive.broadinstitute.org/cancer/cga/polysolver).
 
 ### How do I install LOHHLA? ###
 
@@ -46,8 +61,9 @@ git clone https://bitbucket.org/mcgranahanlab/lohhla.git
 
 ### How do I run LOHHLA? ###
 
-LOHHLA is coded in R, and can be executed from the command line (Terminal, in Linux/UNIX/OSX, or Command Prompt in MS Windows) directly, 
-or using a shell script (see example below).
+LOHHLA is coded in R, and can be executed from the command line (Terminal, in 
+Linux/UNIX/OSX, or Command Prompt in MS Windows) directly, or using a shell script (see 
+example below).
 
 Running LOHHLA with no arguments prints the usage information. 
 
@@ -64,6 +80,9 @@ OPTIONS:
 	-nBAM CHARACTER, --normalBAMfile=CHARACTER
 		normal BAM file
 		can be FALSE to run without normal sample
+
+  -tBAM CHARACTER, --tumorBAMfile=CHARACTER
+    tumor BAM file
 
 	-BAM CHARACTER, --BAMDir=CHARACTER
 		location of all BAMs to test
@@ -117,17 +136,18 @@ OPTIONS:
 	-w CHARACTER, --ignoreWarnings=CHARACTER
 		continue running with warnings [default= TRUE]
 
-	-h, --help
+  -h, --help
 		Show this help message and exit            
  
 
 ### What is the output of LOHHLA? ###
 
-LOHHLA produces multiple different files (see correct-example-out for an example). To determine HLA LOH in a given sample, the most relevant output is the file which ends '.HLAlossPrediction CI.xls'. 
-The most relavant columns are:
+LOHHLA produces multiple different files (see correct-example-out for an example). To 
+determine HLA LOH in a given sample, the most relevant output is the file which ends 
+'.HLAlossPrediction CI.xls'.  The most relavant columns are:
 
-	HLA_A_type1  						 - the identity of allele 1
-	HLA_A_type2  						 - the identity of allele 2
+  HLA_A_type1  						   - the identity of allele 1
+  HLA_A_type2  						   - the identity of allele 2
 	Pval_unique  					     - this is a p-value relating to allelic imbalance 
 	LossAllele      					 - this corresponds to the HLA allele that is subject to loss
 	KeptAllele      					 - this corresponds to the HLA allele that is not subject to loss
@@ -180,14 +200,17 @@ For a full definition of the columns, see below, in each case whether the column
 
 ### How can I test if LOHHLA is working? ###
 
-Example data is included in the LOHHLA repository. To run LOHHLA on the example dataset, alter the "example.sh" script to match your local file structure and ensure the requisite dependencies are available / loaded.
-The --HLAfastaLoc, --gatkDir, and --novoDir file paths should also be updated to the corresponding locations.
-File paths must be full paths. Run "example.sh" and the output should match that found in the "correct-example-out" directory provided.
-All BAM files (normal and tumour) should be found in or linked to the same directory.
+Example data is included in the LOHHLA repository. To run LOHHLA on the example dataset, 
+alter the "example.sh" script to match your local file structure and ensure the requisite 
+dependencies are available / loaded.  The `--HLAfastaLoc`, `--gatkDir`, and `--novoDir` 
+file paths should also be updated to the corresponding locations.  File paths must be full 
+paths. Run "example.sh" and the output should match that found in the 
+`correct-example-out` directory provided.  All BAM files (normal and tumour) should be 
+found in or linked to the same directory.
 
 ### Who do I talk to? ###
 
-If you have any issues with lohhla, please send an email to lohhla@gmail.com
+If you have any issues with LOHHLA, please send an email to lohhla@gmail.com
 
 ### How do I cite LOHHLA ? ###
 
