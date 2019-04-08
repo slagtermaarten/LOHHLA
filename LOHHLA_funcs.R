@@ -1379,7 +1379,7 @@ run_LOHHLA <- function(opt) {
               rep(0, length(HLA_type1normal_nomissmatchCov))
             names(HLA_type1tumor_nomissmatchCov) <-
               names(HLA_type1normal_nomissmatchCov)
-            HLA_type1tumor_nomissmatchCov[rownames(HLA_type1tumor_nomissmatch)] <-
+            HLA_type1tumor_nomissmatchCov[HLA_type1tumor_nomissmatch$rownames] <-
               HLA_type1tumor_nomissmatch$V4
             ## }}} Type 1
             ## {{{ Type 2
@@ -1976,20 +1976,9 @@ run_LOHHLA <- function(opt) {
         res <- harmonize_colnames(HLAoutPut, out)
         HLAoutPut <- res[[1]]
         out <- res[[2]]
-
         HLAoutPut <- tryCatch(rbind(HLAoutPut, out, fill = T),
           error = function(e) { print(e); browser() })
         rownames(HLAoutPut) <- NULL
-
-        if (is.null(PatientOutPut)) {
-          PatientOutPut <- HLAoutPut
-        } else {
-          res <- harmonize_colnames(PatientOutPut, HLAoutPut)
-          PatientOutPut <- res[[1]]
-          HLAoutPut <- res[[2]]
-          PatientOutPut <- tryCatch(rbind(PatientOutPut, HLAoutPut, fill = T),
-            error = function(e) { print(e); browser() })
-        }
 
         ## save some temporary files before plotting
         statistics_fn <- paste(figureDir, '/', region, '.', HLA_gene,
@@ -2607,7 +2596,7 @@ run_LOHHLA <- function(opt) {
   ## {{{ Write the output 
   HLAoutLoc <- paste(workDir, '/', patientId, '.',
     minCoverageFilter, '.DNA.HLAlossPrediction_CI.tsv', sep = '')
-  write_tsv(PatientOutPut, HLAoutLoc)
+  write_tsv(HLAoutPut, HLAoutLoc)
 
   ## Remove redundant rows from output
   system(glue::glue('grep -v \'^TRUE\' {HLAoutLoc} | sort | uniq | \\
