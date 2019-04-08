@@ -27,6 +27,12 @@ option_list = list(
               help="location of flagstat information if already run [default= %default]", metavar="character"),
   make_option(c("-mc", "--minCoverageFilter"), type="numeric", default=30,
               help="minimum coverage at mismatch site [default= %default]", metavar="character"),
+  make_option(c("-tar", "--normalAlignedReads"), type="numeric", default=NULL,
+              help="Number of aligned reads to the normal sample, will be
+              inferred if omitted [default= %default]", metavar="character"),
+  make_option(c("-tar", "--tumorAlignedReads"), type="numeric", default=NULL,
+              help="Number of aligned reads to the tumor sample, will be
+              inferred if omitted [default= %default]", metavar="character"),
   make_option(c("-kmer", "--kmerSize"), type="numeric", default=50,
               help="size of kmers to fish with [default= %default]", metavar="character"),
   make_option(c("-mm", "--numMisMatch"), type="numeric", default=1,
@@ -64,7 +70,7 @@ option_list = list(
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
-## TODO infer this automatically or just configure this to a package
+## TODO infer this automatically or just configure in a package
 if (!dir.exists(opt$LOHHLA_loc)) {
   stop('LOHHLA_loc command line argument seems to be incorrect')
 }

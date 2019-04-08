@@ -940,7 +940,7 @@ run_LOHHLA <- function(opt) {
   ### }}}
 
   ## {{{ Extract number of unique reads sequenced in tumor and normal 
-  if (any(unique(runWithNormal))) {
+  if (any(unique(runWithNormal)) && is.null(opt$normalAlignedReads)) {
     if (!override) {
       regionUniqMappedRegions <-
         getUniqMapReads(workDir = workDir, BAMDir = BAMDir,
@@ -972,6 +972,8 @@ run_LOHHLA <- function(opt) {
     # GermLineUniqMappedReads <-
     #   sum(unlist(regionUniqMappedRegions)[!tumor_regions])
     GermLineUniqMappedReads <- unlist(regionUniqMappedRegions[normalName])
+  } else {
+    GermLineUniqMappedReads <- opt$normalAlignedReads
   }
   ### }}}
 
@@ -983,7 +985,11 @@ run_LOHHLA <- function(opt) {
   ## Don't process normal samples
   for (region in tumorName) {
     if (runWithNormal) {
-      UniqMappedReads <- regionUniqMappedRegions[[region]]
+      if (is.null(opt$tumorAlignedReads)) {
+        UniqMappedReads <- regionUniqMappedRegions[[region]]
+      } else {
+        UniqMappedReads <- opt$tumorAlignedReads
+      }
       MultFactor <- as.numeric(GermLineUniqMappedReads) / 
         as.numeric(UniqMappedReads)
     } else {
