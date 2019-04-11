@@ -1,8 +1,8 @@
-## Install required libraries if required {{{
+## {{{ Install required libraries if required 
 options(warn=2)
 
 for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
-    'naturalsort', 'glue', 'magrittr')) {
+    'naturalsort', 'glue', 'magrittr', 'tools', 'purrr')) {
   if (!require(p, character.only = T)) {
     install.packages(p, character = T)
   }
@@ -19,11 +19,13 @@ write_tsv <- function(object, filename, append = F,
   if (append == T && !file.exists(filename)) {
     system(glue('touch {filename}'), intern = T)
   }
-  tryCatch(write.table(object, file = filename, sep = '\t',
+  # less(filename)
+  tryCatch(
+    write.table(object, file = filename, sep = '\t',
       quote = FALSE, row.names = row.names,
-      append = append, col.names = col.names),
-    error = function(e) { print(e); browser() },
-    warning = function(e) {})
+      append = append, col.names = col.names)
+    , error = function(e) { print(e); browser() },
+    warning = function(e) { })
 }
 
 
@@ -89,7 +91,6 @@ element_divide_vector <- function(
     row.names = NULL
   ), error = function(e) { browser() }, warning = function(e) { browser() })
 
-  colnames(res) <- NULL
   return(res)
 }
 
@@ -161,6 +162,8 @@ create_logger <- function(log_fn) {
   ## See Hadley Wickham's Advanced-R on functionals to see how this
   ## works
   force(log_fn)
+  if (!file.exists(log_fn)) 
+    system(sprintf('touch %s', log_fn), intern = T)
   logger <- function(...) {
     msg <- paste(..., collapse = ' ')
     f_msg <- sprintf('%s - %s\n', date(), msg)
@@ -1000,15 +1003,14 @@ run_LOHHLA <- function(opt) {
       type <- 'normal'
     }
 
-    ## 2019-04-09 17:24 I noticed a bug, perhaps introduced by myself. All
-    ## alleles are exactly the same.
-    if (any(table(md5sum(file.path(sample_dir, filteredBAMfiles))) > 1)) {
+    ## 2019-04-09 17:24 Verify not all filtered bam files are identical
+    if (any(table(tools::md5sum(file.path(sample_dir, filteredBAMfiles))) > 1)) {
       logger('File sizes of filtered bam files: ',
         paste(file.size(file.path(sample_dir, filteredBAMfiles)),
           collapse = ', '))
 
       logger('MD5 sums of filtered bam files: ',
-        paste(md5sum(file.path(sample_dir, filteredBAMfiles)),
+        paste(tools::md5sum(file.path(sample_dir, filteredBAMfiles)),
           collapse = ', '))
     }
 
@@ -1100,7 +1102,9 @@ run_LOHHLA <- function(opt) {
 
     ## {{{ Coverage step
     if (coverageStep) {
-      HLAoutPut_l <- purrr::map(c('hla_a', 'hla_b', 'hla_c'), function(HLA_gene) {
+      combinedTable <- NULL
+      hlas <- c('hla_a', 'hla_b', 'hla_c')
+      HLAoutPut_l <- purrr::map(hlas, function(HLA_gene) {
         logger(sprintf('analyzing coverage differences in sample: %s, hla: %s',
             sample, HLA_gene))
 
@@ -1115,10 +1119,12 @@ run_LOHHLA <- function(opt) {
         }
 
         HLA_As <- grep(HLA_gene, hlaAlleles, value = TRUE)
-        if (length(HLA_As) <= 1) {
-          return(list(message = 'too_few_alleles',
-              HLA_A_type1 = HLA_A_type1,
-              HLA_A_type2 = HLA_A_type2))
+        if (length(HLA_As) == 1) {
+          return(list(message = 'homozygous_alleles_not_implemented',
+              HLA_A_type1 = repl_NA(HLA_As[1]),
+              HLA_A_type2 = repl_NA(HLA_As[2])))
+        } else if (length(HLA_As) == 0) {
+          return(list(message = 'no_recognized_alleles'))
         }
         HLA_A_type1 <- HLA_As[1]
         HLA_A_type2 <- HLA_As[2]
@@ -2206,13 +2212,23 @@ run_LOHHLA <- function(opt) {
           LossAllele=LossAllele,
           KeptAllele=KeptAllele,
           numMisMatchSitesCov=numMisMatchSitesCov,
+          combinedTable=combinedTable,
           propSupportiveSites=propSupportiveSites))
       })
 
       HLAoutPut <- tryCatch(
-        lapply(HLAoutPut_l, function(x) { x[sapply(x, is.null)] <- NA; x }) %>%
-        rbindlist(fill = T)
-      , error = function(e) { print(e); browser() }) 
+        lapply(HLAoutPut_l, function(x) { 
+          x <- x[setdiff(names(x), 'combinedTable')]
+          x[sapply(x, is.null)] <- NA; 
+          x 
+        }) %>% rbindlist(fill = T)
+      , error = function(e) { print(e); browser() })
+
+      combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
+          as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']])))
+        , error = function(e) { print(e); NULL })
+      combinedTable <- tryCatch(rbindlist(combinedTable, fill = T), 
+        error = function(e) { print(e); NULL }) 
     }
     ### Coverage step }}}
 
@@ -2741,8 +2757,10 @@ run_LOHHLA <- function(opt) {
             tmpOut2[tmpOut2[, 4] == duplicationIn1, 3] <-
               median(tmpOut2[tmpOut2[, 4] == duplicationIn1, 3])
 
-            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2] <- median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2])
-            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3] <- median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3])
+            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2] <- 
+              median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2])
+            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3] <- 
+              median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3])
           }
 
           tmpOut2 <- tmpOut2[!duplicated(tmpOut2[, 1]), , drop = FALSE]
@@ -2833,17 +2851,18 @@ run_LOHHLA <- function(opt) {
   ## }}}
 
   ## {{{ Write the output
+  fdate <- format(Sys.time(), '%Y%m%d')
   HLAoutLoc <- paste(workDir, '/', patientId, '.',
-    minCoverageFilter, '.DNA.HLAlossPrediction_CI.tsv', sep = '')
+    minCoverageFilter, '.DNA.HLAlossPrediction_CI.', fdate, '.tsv', sep = '')
   write_tsv(HLAoutPut, HLAoutLoc)
 
   ## Remove redundant rows from output
-  system(glue::glue('grep -v \'^TRUE\' {HLAoutLoc} | sort | uniq | \\
-      sponge {HLAoutLoc}'))
+  # system(glue::glue('grep -v \'^TRUE\' {HLAoutLoc} | sort | uniq | \\
+  #     sponge {HLAoutLoc}'))
 
   if (performIntegerCopyNum) {
     HLABAFsummaryLoc <- paste(workDir, '/', patientId, '.',
-      minCoverageFilter, ".DNA.IntegerCPN_CI.tsv", sep = "")
+      minCoverageFilter, '.DNA.IntegerCPN_CI.', fdate, '.tsv', sep = '')
     write_tsv(combinedTable, HLABAFsummaryLoc)
   }
   ## }}}
