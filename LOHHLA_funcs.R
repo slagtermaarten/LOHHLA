@@ -1266,7 +1266,7 @@ run_LOHHLA <- function(opt) {
         HLA_A_type2tumorCov[HLA_A_type2tumor$rownames] <- HLA_A_type2tumor$V4
         ## }}} Type 2
 
-        # catch issues with HLA coverage
+        ## catch issues with HLA coverage
         HLA_type1_ok <- intersect(names(HLA_A_type1normalCov),
           missMatchPositions$diffSeq1) %>% length
         HLA_type2_ok <- intersect(names(HLA_A_type2normalCov),
@@ -1283,20 +1283,22 @@ run_LOHHLA <- function(opt) {
         }
 
         if (HLA_type1_ok / HLA_type2_ok < 0.05) {
-          msg <- paste('Check that the HLA type is correct for ', HLA_A_type1, '!', sep = '')
+          msg <- paste('Check that the HLA type is correct for ', 
+            HLA_A_type1, '!', sep = '')
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue('hla_type_probably_incorrect_{HLA_A_type1}'),
+              message = glue('mismatch_coverage_imbalance_in_normal_type1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
         if (HLA_type2_ok / HLA_type1_ok < 0.05) {
-          msg <- paste('Check that the HLA type is correct for ', HLA_A_type2, '!', sep = '')
+          msg <- paste('Check that the HLA type is correct for ', 
+            HLA_A_type2, '!', sep = '')
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue('hla_type_probably_incorrect_{HLA_A_type2}'),
+              message = glue('mismatch_coverage_imbalance_in_normal_type2'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
