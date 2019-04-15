@@ -63,6 +63,8 @@ option_list = list(
               help="specify location of jellyfish binary", metavar="character"),
   make_option(c("-bt", "--bedtools"), type="character", default='bedtools',
               help="specify location of bedtools binary", metavar="character"),
+  make_option(c("-fe", "--fnExt"), type="character", default='',
+              help="Extension to append to output file tables", metavar="character"),
   make_option(c("-st", "--samtools"), type="character", default='samtools',
               help="specify location of samtools binary", metavar="character")
 )

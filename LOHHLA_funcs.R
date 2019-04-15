@@ -17,6 +17,7 @@ for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
 write_tsv <- function(object, filename, append = F,
   col.names = T, row.names = F) {
   if (append == T && !file.exists(filename)) {
+    dir.create(dirname(filename), recursive = T, showWarnings = F)
     system(glue('touch {filename}'), intern = T)
   }
   # less(filename)
@@ -560,6 +561,7 @@ run_LOHHLA <- function(opt) {
   stopifnot(file.exists(bedtools))
   samtools <- opt$samtools
   stopifnot(file.exists(samtools))
+  fnExt <- opt$fnExt
 
   if (is.null(BAMDir) || is.null(outputDir) ||
       is.null(normalBAMfile) ||
@@ -1075,9 +1077,6 @@ run_LOHHLA <- function(opt) {
     #   sum(unlist(sample_uniq_mapped_reads)[!tumor_regions])
     GermLineUniqMappedReads <- unlist(sample_uniq_mapped_reads[normalName])
   } else {
-    if (length(opt$normalAlignedReads) > 1) {
-      which.max(opt$normalAlignedReads)
-    }
     GermLineUniqMappedReads <- opt$normalAlignedReads
   }
   ### }}}
@@ -1140,9 +1139,9 @@ run_LOHHLA <- function(opt) {
           baseOnly = TRUE)
 
         tmp <- pairwiseAlignment(seqs[1], seqs[2],
-                                 substitutionMatrix = sigma,
-                                 gapOpening = -2, gapExtension = -4,
-                                 scoreOnly = FALSE, type = 'local')
+          substitutionMatrix = sigma,
+          gapOpening = -2, gapExtension = -4,
+          scoreOnly = FALSE, type = 'local')
 
         missMatchPositions <-
           getMisMatchPositionsPairwiseAlignment(tmp, returnlist = TRUE)
@@ -1174,7 +1173,7 @@ run_LOHHLA <- function(opt) {
           msg <- sprintf('No coverage in normal sample, aborting %s', HLA_gene)
           howToWarn(msg)
           logger(msg)
-          return(list(message = 'no_coverage_in_normal',
+          return(list(message = 'no_pileup_for_normal',
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1208,62 +1207,66 @@ run_LOHHLA <- function(opt) {
         ## 2019-04-04 11:35 M.S. Rownames might not be unique, using the
         ## rownames attribute is therefore unsafe
         ## Type 1 {{{
-        HLA_A_type1normal$rownames <- as.character(HLA_A_type1normal$V2)
+        HLA_A_type1normal$mm_position <- as.character(HLA_A_type1normal$V2)
         tumpile <- paste0(workDir, '/', sample, '.',
           HLA_A_type1, '.', 'tumor.mpileup')
         HLA_A_type1tumor <- read.table(tumpile, sep = '\t',
           stringsAsFactors = FALSE, quote = '', fill = TRUE,
           col.names = paste0('V', c(1:6)))
-        HLA_A_type1tumor$rownames <- HLA_A_type1tumor$V2
+        HLA_A_type1tumor$mm_position <- HLA_A_type1tumor$V2
 
         ## Apply minimum coverage thresholds (we only apply this to the normal
         ## for now)
         HLA_A_type1normal <-
           HLA_A_type1normal[HLA_A_type1normal$V4 > minCoverageFilter,
           , drop = FALSE]
-        tmp <- intersect(HLA_A_type1tumor$rownames, HLA_A_type1normal$rownames)
+        tmp <- intersect(HLA_A_type1tumor$mm_position,
+          HLA_A_type1normal$mm_position)
         HLA_A_type1normal <-
-          HLA_A_type1normal[HLA_A_type1normal$rownames %in% tmp, , drop = FALSE] %>% unique
-        HLA_A_type1normal[duplicated(HLA_A_type1normal$rownames), ]
-        HLA_A_type1normal[HLA_A_type1normal$rownames == '220', ]
-        HLA_A_type1normal[HLA_A_type1normal$rownames == '247', ]
-        HLA_A_type1tumor[HLA_A_type1tumor$rownames == '247', ]
+          HLA_A_type1normal[HLA_A_type1normal$mm_position %in% tmp, , drop = FALSE] %>% unique
+        HLA_A_type1normal[duplicated(HLA_A_type1normal$mm_position), ]
+        HLA_A_type1normal[HLA_A_type1normal$mm_position == '220', ]
+        HLA_A_type1normal[HLA_A_type1normal$mm_position == '247', ]
+        HLA_A_type1tumor[HLA_A_type1tumor$mm_position == '247', ]
 
         HLA_A_type1tumor <-
-          HLA_A_type1tumor[HLA_A_type1tumor$rownames %in% tmp, , drop = FALSE] %>% unique
+          HLA_A_type1tumor[HLA_A_type1tumor$mm_position %in% tmp, , drop = FALSE] %>% unique
 
         HLA_A_type1normalCov <- HLA_A_type1normal$V4
         names(HLA_A_type1normalCov) <- HLA_A_type1normal$V2
-        HLA_A_type1normalCov <- HLA_A_type1normalCov[HLA_A_type1tumor$rownames]
+        HLA_A_type1normalCov <-
+          HLA_A_type1normalCov[HLA_A_type1tumor$mm_position]
 
         HLA_A_type1tumorCov <- rep(0, length(HLA_A_type1normalCov))
         names(HLA_A_type1tumorCov) <- names(HLA_A_type1normalCov)
-        HLA_A_type1tumorCov[HLA_A_type1tumor$rownames] <- HLA_A_type1tumor$V4
+        HLA_A_type1tumorCov[HLA_A_type1tumor$mm_position] <- HLA_A_type1tumor$V4
         ## }}} Type 1
+
         ## Type 2 {{{
-        HLA_A_type2normal$rownames <- as.character(HLA_A_type2normal$V2)
+        HLA_A_type2normal$mm_position <- as.character(HLA_A_type2normal$V2)
         tumpile <- paste0(workDir, '/', sample, '.',
           HLA_A_type2, '.', 'tumor.mpileup')
         HLA_A_type2tumor <- read.table(tumpile, sep = '\t',
           stringsAsFactors = FALSE, quote = '', fill = TRUE,
           col.names = paste0('V', c(1:6)))
-        HLA_A_type2tumor$rownames <- HLA_A_type2tumor$V2
+        HLA_A_type2tumor$mm_position <- HLA_A_type2tumor$V2
 
         ## Apply minimum coverage thresholds (we only apply this to the normal
         ## for now)
         HLA_A_type2normal <-
           HLA_A_type2normal[HLA_A_type2normal$V4 > minCoverageFilter,
           , drop = FALSE]
-        tmp <- intersect(HLA_A_type2tumor$rownames, HLA_A_type2normal$rownames)
+        tmp <- intersect(HLA_A_type2tumor$mm_position,
+          HLA_A_type2normal$mm_position)
         HLA_A_type2tumor <-
-          HLA_A_type2tumor[HLA_A_type2tumor$rownames %in% tmp, , drop = FALSE]
+          HLA_A_type2tumor[HLA_A_type2tumor$mm_position %in% tmp, , drop = FALSE]
 
         HLA_A_type2normalCov <- HLA_A_type2normal$V4
         names(HLA_A_type2normalCov) <- HLA_A_type2normal$V2
 
         HLA_A_type2tumorCov <- rep(0, length(HLA_A_type2normalCov))
         names(HLA_A_type2tumorCov) <- names(HLA_A_type2normalCov)
-        HLA_A_type2tumorCov[HLA_A_type2tumor$rownames] <- HLA_A_type2tumor$V4
+        HLA_A_type2tumorCov[HLA_A_type2tumor$mm_position] <- HLA_A_type2tumor$V4
         ## }}} Type 2
 
         ## catch issues with HLA coverage
@@ -1313,8 +1316,10 @@ run_LOHHLA <- function(opt) {
           missMatchBed1 <- mismatchPosSeq1[, c(1, 2, 2)]
           missMatchBed1$V2 <- as.numeric(missMatchBed1$V2) - 1
           missMatchBed1$V3 <- as.numeric(missMatchBed1$V2.1) + 1
+          type1_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed', 
+            sep = '')
           write.table(missMatchBed1,
-            file = paste(workDir, '/', sample, '.', HLA_A_type1, '.bed', sep = ''),
+            file = type1_bed,
             quote = FALSE, sep = '\t', col.names = FALSE, row.names = FALSE)
           ## }}} Type 1
           ## {{{ Type 2
@@ -1324,18 +1329,21 @@ run_LOHHLA <- function(opt) {
           missMatchBed2 <- mismatchPosSeq2[, c(2, 2, 2)]
           missMatchBed2$V2 <- as.numeric(missMatchBed2$V2) - 1
           missMatchBed2$V3 <- as.numeric(missMatchBed2$V2.2) + 1
+          type2_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed', 
+            sep = '')
           write.table(missMatchBed2,
-            file = paste(workDir, '/', sample, '.', HLA_A_type2, '.bed', sep = ''),
+            file = type2_bed,
             quote = FALSE, sep = '\t', col.names = FALSE, row.names = FALSE)
           ## }}} Type 2
 
           ## {{{ Type 1
-          Type1TumorCmd <- paste(bedtools, " intersect -v -a ", workDir, '/',
-            sample, "/", sample, ".type.", HLA_A_type1, ".filtered.bam",
-            " -b ", workDir, '/', sample, ".", HLA_A_type1, ".bed",
-            " > ",
-            workDir, '/', sample, ".", HLA_A_type1, ".tumor.NoMissMatch.bam",
-            sep = "")
+          Type1TumorCmd <- paste(bedtools, ' intersect -v -a ', 
+            workDir, '/', sample, '/', sample, '.type.', HLA_A_type1, 
+            '.filtered.bam', ' -b ', 
+            workDir, '/', sample, '.', HLA_A_type1, '.bed',
+            ' > ',
+            workDir, '/', sample, '.', HLA_A_type1, '.tumor.NoMissMatch.bam',
+            sep = '')
           logger(Type1TumorCmd)
           system(Type1TumorCmd)
 
@@ -1343,7 +1351,8 @@ run_LOHHLA <- function(opt) {
             Type1NormalCmd <- paste(bedtools, ' intersect -v -a ',
               workDir, '/', normalName, '/', normalName, '.type.', HLA_A_type1,
               '.filtered.bam -b ',
-              workDir, '/', sample, '.', HLA_A_type1, '.bed', ' > ',
+              workDir, '/', sample, '.', HLA_A_type1, '.bed', 
+              ' > ',
               workDir, '/', sample, '.', HLA_A_type1, '.normal.NoMissMatch.bam',
               sep = '')
             system(Type1NormalCmd)
@@ -2855,7 +2864,7 @@ run_LOHHLA <- function(opt) {
   ## {{{ Write the output
   fdate <- format(Sys.time(), '%Y%m%d')
   HLAoutLoc <- paste(workDir, '/', patientId, '.',
-    minCoverageFilter, '.DNA.HLAlossPrediction_CI.', fdate, '.tsv', sep = '')
+    minCoverageFilter, '.DNA.HLAlossPrediction_CI.', fdate, fnExt, '.tsv', sep = '')
   write_tsv(HLAoutPut, HLAoutLoc)
 
   ## Remove redundant rows from output
@@ -2864,7 +2873,7 @@ run_LOHHLA <- function(opt) {
 
   if (performIntegerCopyNum) {
     HLABAFsummaryLoc <- paste(workDir, '/', patientId, '.',
-      minCoverageFilter, '.DNA.IntegerCPN_CI.', fdate, '.tsv', sep = '')
+      minCoverageFilter, '.DNA.IntegerCPN_CI.', fdate, fnExt, '.tsv', sep = '')
     write_tsv(combinedTable, HLABAFsummaryLoc)
   }
   ## }}}
