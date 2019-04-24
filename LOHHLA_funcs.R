@@ -1,4 +1,4 @@
-## {{{ Install required libraries if required 
+## {{{ Install required libraries if required
 options(warn=2)
 
 for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
@@ -161,10 +161,12 @@ PasteVector <- function(v, sep = "") {
 
 create_logger <- function(log_fn) {
   ## See Hadley Wickham's Advanced-R on functionals to see how this
-  ## works
+  ## works if unclear
   force(log_fn)
-  if (!file.exists(log_fn)) 
+  if (!file.exists(log_fn)) {
+    dir.create(dirname(log_fn), recursive = T, showWarnings = F)
     system(sprintf('touch %s', log_fn), intern = T)
+  }
   logger <- function(...) {
     msg <- paste(..., collapse = ' ')
     f_msg <- sprintf('%s - %s\n', date(), msg)
@@ -312,20 +314,16 @@ dont.count.twice <- function(BAMfile1, BAMfile2,
 getMisMatchPositionsPairwiseAlignment <- function(alignment,
   chunksize = 60, returnlist = FALSE) {
 
-  seq1aln <- pattern(alignment) # Get the alignment for the first sequence
-  seq2aln <- subject(alignment) # Get the alignment for the second sequence
-
-  #let's check differences across the whole thing
-  gapsSeq1 <- countPattern('-', as.character(seq1aln))
-  seq1alnresidues <-
-    length(unlist(strsplit(as.character(seq1aln), split = ''))) - gapsSeq1
+  ## Aligned residues
+  seq1_ar <- unlist(strsplit(as.character(pattern(alignment)), split = ''))
+  seq2_ar <- unlist(strsplit(as.character(subject(alignment)), split = ''))
 
   k <- 1
   seq1Positions <- c()
-  for (char in unlist(strsplit(as.character(seq1aln), split = ""))) {
+  for (char in seq1_ar) {
     if (char %in% c('C', 'G', 'A', 'T')) {
       seq1Positions <- c(seq1Positions, k)
-      k <- k+1
+      k <- k + 1
       next;
     }
     if (char %in% c('-')) {
@@ -336,10 +334,10 @@ getMisMatchPositionsPairwiseAlignment <- function(alignment,
 
   k <- 1
   seq2Positions <- c()
-  for (char in unlist(strsplit(as.character(seq2aln), split = ""))) {
+  for (char in seq2_ar) {
     if (char %in% c('C', 'G', 'A', 'T')) {
       seq2Positions <- c(seq2Positions, k)
-      k <- k+1
+      k <- k + 1
       next;
     }
     if (char %in% c('-')) {
@@ -348,23 +346,22 @@ getMisMatchPositionsPairwiseAlignment <- function(alignment,
     }
   }
 
-  diffSeq1 <-
-    seq1Positions[unlist(strsplit(as.character(seq1aln), split = "")) !=
-    unlist(strsplit(as.character(seq2aln), split = ""))]
-  diffSeq2 <- seq2Positions[unlist(strsplit(as.character(seq1aln), split = "")) !=
-    unlist(strsplit(as.character(seq2aln), split = ""))]
+  mm_bools <- seq1_ar != seq2_ar
+  diffSeq1 <- seq1Positions[mm_bools]
+  diffSeq2 <- seq2Positions[mm_bools]
 
   diffType1 <- rep(1, length(diffSeq1))
-  diffType1[which(unlist(strsplit(as.character(seq1aln), split = ""))[unlist(strsplit(as.character(seq1aln), split = "")) != unlist(strsplit(as.character(seq2aln), split = ""))] %in% '-')] <- 2
+  diffType1[which(seq1_ar[mm_bools] %in% '-')] <- 2
 
   diffType2 <- rep(1, length(diffSeq2))
-  diffType2[which(unlist(strsplit(as.character(seq2aln), split = ""))[unlist(strsplit(as.character(seq2aln), split = "")) != unlist(strsplit(as.character(seq1aln), split = ""))] %in% '-')] <- 2
+  diffType2[which(seq2_ar[mm_bools] %in% '-')] <- 2
 
-  out <- list()
-  out$diffSeq1 <- diffSeq1
-  out$diffSeq2 <- diffSeq2
-  out$diffType1 <- diffType1
-  out$diffType2 <- diffType2
+  out <- list(
+    diffSeq1 = diffSeq1,
+    diffSeq2 = diffSeq2,
+    diffType1 = diffType1,
+    diffType2 = diffType2
+  )
   return(out)
 }
 
@@ -388,7 +385,7 @@ getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
       flagstat <- paste0(outDir, sample, '.proc.flagstat')
       cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', flagstat)
       if (file.exists(flagstat)) {
-        logger(flagstat, "already exists, skipping")
+        logger(flagstat, 'already exists, skipping')
       } else {
         system(cmd)
       }
@@ -414,22 +411,16 @@ getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
 }
 
 
-funCalcN_withBAF <- function(logRSites, bafSites,
-  tumorPloidy, tumorPurity, gamma) {
-
-  nA <- (tumorPurity - 1 + bafSites * 2^(logRSites/gamma) *
-    ((1 - tumorPurity) * 2 + tumorPurity * tumorPloidy)) / tumorPurity
-
-  nB <- (tumorPurity - 1 - (bafSites - 1) * 2^(logRSites/gamma) *
-    ((1 - tumorPurity) * 2 + tumorPurity * tumorPloidy)) / tumorPurity
-
+funCalcN_withBAF <- function(logR, BAF, psi, rho, gamma = 1) {
+  avg_ploidy <- (1 - rho) * 2 + rho * psi
+  nA <- (rho - 1 + BAF * 2^(logR/gamma) * avg_ploidy) / rho
+  nB <- (rho - 1 - (BAF - 1) * 2^(logR/gamma) * avg_ploidy) / rho
   return(cbind(nA, nB))
 }
 
 
-funCalcN_withoutBAF <- function(rSites, tumorPloidy, tumorPurity, gamma) {
-  ((((1 - tumorPurity) + tumorPurity * tumorPloidy / 2)) *
-    2^(rSites/gamma) - (1 - tumorPurity)) / tumorPurity
+funCalcN_withoutBAF <- function(logR, psi, rho, gamma) {
+  ((((1 - rho) + rho * psi / 2)) * 2^(logR/gamma) - (1 - rho)) / rho
 }
 
 
@@ -568,13 +559,13 @@ run_LOHHLA <- function(opt) {
       is.null(tumorBAMfile) ||
       is.null(hlaPath) || is.null(HLAfastaLoc)) {
     if (interactive()) print_help(opt_parser)
-    stop("Missing arguments.\n", call. = FALSE)
+    stop('Missing arguments.\n', call. = FALSE)
   }
 
   figureDir <- file.path(outputDir, 'Figures')
   log_fn <- paste(outputDir, '/running.hla.loh.exome@',
     gsub(':', '-', gsub(' +', '_', date())), '.log', sep = '')
-  logger <- create_logger(log_fn)
+  logger <<- create_logger(log_fn)
 
   runWithNormal <- any(normalBAMfile != 'FALSE')
   extractNONmismatchReads <- TRUE
@@ -1132,19 +1123,17 @@ run_LOHHLA <- function(opt) {
         HLA_type1Fasta <- hlaFasta[[HLA_A_type1]]
         HLA_type2Fasta <- hlaFasta[[HLA_A_type2]]
 
-        ## Perform local pairwise alignement
+        ## Perform local pairwise alignment
         seqs <- c(PasteVector(toupper(HLA_type1Fasta), sep = ""),
                   PasteVector(toupper(HLA_type2Fasta), sep = ""))
         sigma <- nucleotideSubstitutionMatrix(match = 2, mismatch = -1,
           baseOnly = TRUE)
 
-        tmp <- pairwiseAlignment(seqs[1], seqs[2],
+        missMatchPositions <- pairwiseAlignment(seqs[1], seqs[2],
           substitutionMatrix = sigma,
           gapOpening = -2, gapExtension = -4,
-          scoreOnly = FALSE, type = 'local')
-
-        missMatchPositions <-
-          getMisMatchPositionsPairwiseAlignment(tmp, returnlist = TRUE)
+          scoreOnly = FALSE, type = 'local') %>%
+          getMisMatchPositionsPairwiseAlignment(returnlist = TRUE)
 
         if (length(missMatchPositions$diffSeq1) == 0) {
           msg <- 'HLA alleles are identical, although they have different names'
@@ -1220,14 +1209,16 @@ run_LOHHLA <- function(opt) {
         HLA_A_type1normal <-
           HLA_A_type1normal[HLA_A_type1normal$V4 > minCoverageFilter,
           , drop = FALSE]
+        ## Select loci for which coverage info is available for both tumor and
+        ## matched normal
         tmp <- intersect(HLA_A_type1tumor$mm_position,
           HLA_A_type1normal$mm_position)
         HLA_A_type1normal <-
           HLA_A_type1normal[HLA_A_type1normal$mm_position %in% tmp, , drop = FALSE] %>% unique
-        HLA_A_type1normal[duplicated(HLA_A_type1normal$mm_position), ]
-        HLA_A_type1normal[HLA_A_type1normal$mm_position == '220', ]
-        HLA_A_type1normal[HLA_A_type1normal$mm_position == '247', ]
-        HLA_A_type1tumor[HLA_A_type1tumor$mm_position == '247', ]
+        # HLA_A_type1normal[duplicated(HLA_A_type1normal$mm_position), ]
+        # HLA_A_type1normal[HLA_A_type1normal$mm_position == '220', ]
+        # HLA_A_type1normal[HLA_A_type1normal$mm_position == '247', ]
+        # HLA_A_type1tumor[HLA_A_type1tumor$mm_position == '247', ]
 
         HLA_A_type1tumor <-
           HLA_A_type1tumor[HLA_A_type1tumor$mm_position %in% tmp, , drop = FALSE] %>% unique
@@ -1280,35 +1271,36 @@ run_LOHHLA <- function(opt) {
           msg <- glue::glue('No position has greater than minimum \\
             coverage filter for {HLA_gene}')
           logger(msg)
-          return(list(message = 'no_position_sufficiently_covered',
+          return(list(message = 'no_position_sufficiently_covered_in_normal',
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
 
         if (HLA_type1_ok / HLA_type2_ok < 0.05) {
-          msg <- paste('Check that the HLA type is correct for ', 
+          msg <- paste('Check that the HLA type is correct for ',
             HLA_A_type1, '!', sep = '')
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue('mismatch_coverage_imbalance_in_normal_type1'),
+              message = glue('mismatch_pos_density_imbalance_in_normal_allele1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
         if (HLA_type2_ok / HLA_type1_ok < 0.05) {
-          msg <- paste('Check that the HLA type is correct for ', 
+          msg <- paste('Check that the HLA type is correct for ',
             HLA_A_type2, '!', sep = '')
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue('mismatch_coverage_imbalance_in_normal_type2'),
+              message = glue('mismatch_pos_density_imbalance_in_normal_allele2'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
 
         if (extractNONmismatchReads == T) {
           ## Next, let's extract the reads that do not cover any mismatches,
-          ## and then mpileup them
+          ## and then mpileup them.
+          ## First, make bed-files for mismatch positions
           ## {{{ Type 1
           mismatchPosSeq1 <-
             HLA_A_type1tumor[HLA_A_type1tumor$V2 %in%
@@ -1316,7 +1308,7 @@ run_LOHHLA <- function(opt) {
           missMatchBed1 <- mismatchPosSeq1[, c(1, 2, 2)]
           missMatchBed1$V2 <- as.numeric(missMatchBed1$V2) - 1
           missMatchBed1$V3 <- as.numeric(missMatchBed1$V2.1) + 1
-          type1_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed', 
+          type1_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed',
             sep = '')
           write.table(missMatchBed1,
             file = type1_bed,
@@ -1329,7 +1321,7 @@ run_LOHHLA <- function(opt) {
           missMatchBed2 <- mismatchPosSeq2[, c(2, 2, 2)]
           missMatchBed2$V2 <- as.numeric(missMatchBed2$V2) - 1
           missMatchBed2$V3 <- as.numeric(missMatchBed2$V2.2) + 1
-          type2_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed', 
+          type2_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed',
             sep = '')
           write.table(missMatchBed2,
             file = type2_bed,
@@ -1337,10 +1329,11 @@ run_LOHHLA <- function(opt) {
           ## }}} Type 2
 
           ## {{{ Type 1
-          Type1TumorCmd <- paste(bedtools, ' intersect -v -a ', 
-            workDir, '/', sample, '/', sample, '.type.', HLA_A_type1, 
-            '.filtered.bam', ' -b ', 
-            workDir, '/', sample, '.', HLA_A_type1, '.bed',
+          ## Select regions that are not covered in bed file
+          Type1TumorCmd <- paste(bedtools, ' intersect -v ',
+            ' -a ', workDir, '/', sample, '/', sample, '.type.', HLA_A_type1,
+            '.filtered.bam',
+            ' -b ', workDir, '/', sample, '.', HLA_A_type1, '.bed',
             ' > ',
             workDir, '/', sample, '.', HLA_A_type1, '.tumor.NoMissMatch.bam',
             sep = '')
@@ -1348,10 +1341,10 @@ run_LOHHLA <- function(opt) {
           system(Type1TumorCmd)
 
           if (runWithNormal) {
-            Type1NormalCmd <- paste(bedtools, ' intersect -v -a ',
-              workDir, '/', normalName, '/', normalName, '.type.', HLA_A_type1,
-              '.filtered.bam -b ',
-              workDir, '/', sample, '.', HLA_A_type1, '.bed', 
+            Type1NormalCmd <- paste(bedtools, ' intersect -v ',
+              '-a ', workDir, '/', normalName, '/', normalName,
+              '.type.', HLA_A_type1, '.filtered.bam ',
+              '-b ', workDir, '/', sample, '.', HLA_A_type1, '.bed',
               ' > ',
               workDir, '/', sample, '.', HLA_A_type1, '.normal.NoMissMatch.bam',
               sep = '')
@@ -1486,11 +1479,11 @@ run_LOHHLA <- function(opt) {
               is.null(HLA_type2normal_nomissmatch)) {
             msg <- paste('No non-mismatch positions for ', HLA_gene, sep = '')
             logger(msg)
-            return(list(
-                message = glue('no_non_mismatch_positions_{HLA_gene}'),
-                HLA_A_type1 = HLA_A_type1,
-                HLA_A_type2 = HLA_A_type2))
-          } else{
+            # return(list(
+            #     message = glue('no_non_mismatch_positions_{HLA_gene}'),
+            #     HLA_A_type1 = HLA_A_type1,
+            #     HLA_A_type2 = HLA_A_type2))
+          } else {
             ## Apply minimum coverage thresholds (we only apply this to the
             ## normal for now)
             ## {{{ Type 1
@@ -1499,9 +1492,8 @@ run_LOHHLA <- function(opt) {
             HLA_type1normal_nomissmatch$rownames <-
               HLA_type1normal_nomissmatch$V2
 
-            HLA_type1normal_nomissmatch <-
-              HLA_type1normal_nomissmatch[HLA_type1normal_nomissmatch$V4>minCoverageFilter,
-              , drop = FALSE]
+            HLA_type1normal_nomissmatch %<>%
+              { .[.$V4 > minCoverageFilter, , drop = FALSE] }
 
             tmp <- intersect(
               HLA_type1tumor_nomissmatch$rownames,
@@ -1728,9 +1720,11 @@ run_LOHHLA <- function(opt) {
           ifelse(missMatchPositions$diffSeq1 %in% names(HLA_A_type1normalCov),
             1, 0),
           ifelse(missMatchPositions$diffSeq2 %in% names(HLA_A_type2normalCov),
-            1, 0))
-        missMatchseq1 <- missMatchPositions$diffSeq1[rowSums(misMatchCoveredInBoth) == 2]
-        missMatchseq2 <- missMatchPositions$diffSeq2[rowSums(misMatchCoveredInBoth) == 2]
+            1, 0)) %>%
+          { rowSums(.) == 2 }
+
+        missMatchseq1 <- missMatchPositions$diffSeq1[misMatchCoveredInBoth]
+        missMatchseq2 <- missMatchPositions$diffSeq2[misMatchCoveredInBoth]
 
         ## Let's get bins to collect for the coverage estimates
         startChar <- min(as.numeric(c(names(HLA_A_type1tumorCov),
@@ -1751,13 +1745,11 @@ run_LOHHLA <- function(opt) {
             median(HLA_A_type2tumorCov[shared_sites], na.rm = TRUE)
           } %>% repl_NA
           combinedBinNormal <- {
-            median(HLA_A_type1normalCov[shared_sites],
-              na.rm= TRUE) +
-            median(HLA_A_type2normalCov[shared_sites],
-              na.rm = TRUE)
+            median(HLA_A_type1normalCov[shared_sites], na.rm= TRUE) +
+            median(HLA_A_type2normalCov[shared_sites], na.rm = TRUE)
           } %>% repl_NA
           combinedBinlogR <-
-            { log2(combinedBinTumor) - log2(combinedBinNormal) +
+          { log2(combinedBinTumor) - log2(combinedBinNormal) +
               log2(MultFactor) } %>% repl_NA
           type1BinlogR <- shared_sites %>%
             { log2(HLA_A_type1tumorCov[.]) - log2(HLA_A_type1normalCov[.]) +
@@ -1783,41 +1775,37 @@ run_LOHHLA <- function(opt) {
         ## 2019-04-10 11:10 M.S. was getting warnings in element-wise division
         ## of arrays that were of incompatible sizes. This addition should
         ## prevent that.
-        type1 <-
+        type1_logR <-
           element_divide_vector(HLA_A_type1tumorCov[missMatchseq1_intersect],
           HLA_A_type1normalCov[missMatchseq1_intersect],
           mult_factor = MultFactor) %>%
-          set_colnames(c('idx', 'logR_1'))
+          .[, 2]
 
-        type2 <- element_divide_vector(
+        type2_logR <- element_divide_vector(
           HLA_A_type2tumorCov[missMatchseq2_intersect],
           HLA_A_type2normalCov[missMatchseq2_intersect],
           mult_factor = MultFactor) %>%
-          set_colnames(c('idx', 'logR_2'))
-
-        tmpOut_cn <- merge(type1, type2, by = 'idx', all = T) %>%
-          dplyr::arrange(idx)
+          set_colnames(c('idx', 'logR_2')) %>%
+          .[, 2]
 
         tmpOut_cn <- cbind_uneven(
           as.numeric(missMatchseq1_intersect),
-          missMatchseq1_intersect %>%
-            { log2(HLA_A_type1tumorCov[.]) - log2(HLA_A_type1normalCov[.]) +
-              log2(MultFactor) },
+          type1_logR,
           HLA_A_type1tumorCov[missMatchseq1_intersect],
           as.numeric(missMatchseq2_intersect),
-          missMatchseq2_intersect %>%
-            { log2(HLA_A_type2tumorCov[.]) - log2(HLA_A_type2normalCov[.]) +
-              log2(MultFactor) },
+          type2_logR,
           HLA_A_type2tumorCov[missMatchseq2_intersect],
           HLA_A_type1normalCov[as.character(missMatchseq1_intersect)],
           HLA_A_type2normalCov[as.character(missMatchseq2_intersect)])
-        colnames(tmpOut_cn) <- c('missMatchseq1', 'logR_type1',
-          'TumorCov_type1', 'missMatchseq2', 'logR_type2', 'TumorCov_type2',
-          'NormalCov_type1', 'NormalCov_type2')
+        colnames(tmpOut_cn) <-
+          c('missMatchseq1', 'logR_type1', 'TumorCov_type1',
+            'missMatchseq2', 'logR_type2', 'TumorCov_type2',
+            'NormalCov_type1', 'NormalCov_type2')
 
         dup1 <- unique(tmpOut_cn[duplicated(tmpOut_cn[, 1]), 1])
         dup2 <- unique(tmpOut_cn[duplicated(tmpOut_cn[, 4]), 4])
 
+        ## Average observations in case of duplicates
         for (duplicationIn1 in dup1) {
           tmpOut_cn[tmpOut_cn[, 1] == duplicationIn1, 'TumorCov_type2'] <-
             mean(tmpOut_cn[tmpOut_cn[, 1] == duplicationIn1, 'TumorCov_type2'])
@@ -1838,20 +1826,14 @@ run_LOHHLA <- function(opt) {
 
         tmpOut_cn <- tmpOut_cn[!duplicated(tmpOut_cn[, 1]), , drop = FALSE]
         tmpOut_cn <- tmpOut_cn[!duplicated(tmpOut_cn[, 4]), , drop = FALSE]
-        colnames(tmpOut_cn) <- c('missMatchseq1', 'logR_type1',
-          'TumorCov_type1', 'missMatchseq2', 'logR_type2', 'TumorCov_type2',
-          'NormalCov_type1', 'NormalCov_type2')
+        colnames(tmpOut_cn) <-
+          c('missMatchseq1', 'logR_type1', 'TumorCov_type1',
+            'missMatchseq2', 'logR_type2', 'TumorCov_type2',
+            'NormalCov_type1', 'NormalCov_type2')
 
         combinedTable <- data.frame(tmpOut_cn, stringsAsFactors = FALSE) %>%
           lapply(as.numeric) %>%
           as.data.frame
-
-        combinedTable$logRcombined <-
-          log2(((combinedTable$TumorCov_type1 + combinedTable$TumorCov_type2) /
-            (combinedTable$NormalCov_type1 + combinedTable$NormalCov_type2)) *
-          MultFactor)
-        combinedTable$BAFcombined <- combinedTable$TumorCov_type1 /
-          (combinedTable$TumorCov_type1+combinedTable$TumorCov_type2)
 
         if (nrow(combinedTable) != 0) {
           combinedTable$binlogRCombined <- NA
@@ -1874,9 +1856,7 @@ run_LOHHLA <- function(opt) {
             combinedTable[i, ]$binlogRtype1 <- binLogR[binned_idx, 4]
             combinedTable[i, ]$binlogRtype2 <- binLogR[binned_idx, 5]
           }
-        }
-
-        if (nrow(combinedTable) == 0) {
+        } else {
           combinedTable$binlogRCombined <- NA
           combinedTable$binlogRtype1 <- NA
           combinedTable$binlogRtype2 <- NA
@@ -2228,18 +2208,18 @@ run_LOHHLA <- function(opt) {
       })
 
       HLAoutPut <- tryCatch(
-        lapply(HLAoutPut_l, function(x) { 
+        lapply(HLAoutPut_l, function(x) {
           x <- x[setdiff(names(x), 'combinedTable')]
-          x[sapply(x, is.null)] <- NA; 
-          x 
+          x[sapply(x, is.null)] <- NA;
+          x
         }) %>% rbindlist(fill = T)
       , error = function(e) { print(e); browser() })
 
       combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
           as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']])))
         , error = function(e) { print(e); NULL })
-      combinedTable <- tryCatch(rbindlist(combinedTable, fill = T), 
-        error = function(e) { print(e); NULL }) 
+      combinedTable <- tryCatch(rbindlist(combinedTable, fill = T),
+        error = function(e) { print(e); NULL })
     }
     ### Coverage step }}}
 
@@ -2768,9 +2748,9 @@ run_LOHHLA <- function(opt) {
             tmpOut2[tmpOut2[, 4] == duplicationIn1, 3] <-
               median(tmpOut2[tmpOut2[, 4] == duplicationIn1, 3])
 
-            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2] <- 
+            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2] <-
               median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2])
-            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3] <- 
+            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3] <-
               median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3])
           }
 
