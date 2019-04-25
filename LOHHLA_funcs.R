@@ -501,6 +501,7 @@ run_LOHHLA <- function(opt) {
   workDir <- outputDir <- opt$outputDir
   normalBAMfile <- opt$normalBAMfile
   tumorBAMfile <- opt$tumorBAMfile
+  error_msg <- ''
   # example of invalid file name (as in LOHHLA code cannot handle this currently)
   # grepl('^.+\\..+\\.bam$', "normal_hla_loci.sorted.bam")
   # test for valid file name
@@ -618,7 +619,6 @@ run_LOHHLA <- function(opt) {
     stop('Unexpected parsing of hlaPath')
   }
 
-
   hlaFasta <- read.fasta(HLAfastaLoc)
   if (!all(hlaAlleles %in% names(hlaFasta))) {
     missing_hlas <- setdiff(hlaAlleles, names(hlaFasta))
@@ -670,8 +670,10 @@ run_LOHHLA <- function(opt) {
   }
 
   if (length(hlaAlleles) == 0) {
-    stop('No suitable HLA alleles!')
-  }
+    ## Turn mapping of because there's nothing to map anyway
+    mappingStep <- F
+    coverageStep <- F
+  } 
   ### }}}
 
   ## {{{ Pre-mapping step: double check whether we actually want to do the
@@ -977,64 +979,73 @@ run_LOHHLA <- function(opt) {
   ### }}}
 
   ## {{{ Get coverage for samples
-  for (sample in samples) {
-    logger(sprintf('get coverage of HLA alleles for sample: %s', sample))
-    sample_dir <- paste(workDir, '/', sample, sep = '')
-    filteredBAMfiles <- grep('filtered.bam$',
-      grep('type', list.files(sample_dir, recursive = T), value = TRUE),
-      value = TRUE)
-    if (length(filteredBAMfiles) == 0) {
-      msg <- sprintf('No filtered bam files were made for %s, aborting LOHHLA',
-        sample)
-      logger(msg)
-      stop(msg)
-    }
-
-    if (sample %in% tumorName) {
-      type <- 'tumor'
-    } else {
-      type <- 'normal'
-    }
-
-    ## 2019-04-09 17:24 Verify not all filtered bam files are identical
-    if (any(table(tools::md5sum(file.path(sample_dir, filteredBAMfiles))) > 1)) {
-      logger('File sizes of filtered bam files: ',
-        paste(file.size(file.path(sample_dir, filteredBAMfiles)),
-          collapse = ', '))
-
-      logger('MD5 sums of filtered bam files: ',
-        paste(tools::md5sum(file.path(sample_dir, filteredBAMfiles)),
-          collapse = ', '))
-    }
-
-    ## Get pileup files for each bam
-    for (BAMfile in filteredBAMfiles) {
-      hlaAllele <- grep(pattern = 'hla',
-        x = unlist(strsplit(BAMfile, split = '\\.')), value = TRUE)
-      ## Make hlaAllele inference robust to file names that have the words
-      #$ hla_loci in them
-      if (length(hlaAllele) > 1) {
-        hlaAllele <- grep('hla_(?!loci)', hlaAllele, value = T, perl = T)
+  if (coverageStep) {
+    for (sample in samples) {
+      logger(sprintf('get coverage of HLA alleles for sample: %s', sample))
+      sample_dir <- paste(workDir, '/', sample, sep = '')
+      filteredBAMfiles <- grep('filtered.bam$',
+        grep('type', list.files(sample_dir, recursive = T), value = TRUE),
+        value = TRUE)
+      if (length(filteredBAMfiles) == 0) {
+        msg <- sprintf('No filtered bam files were made for %s, aborting LOHHLA',
+          sample)
+        logger(msg)
+        error_msg <- glue('{error_msg};no_filtered_bam_present_{sample}')
+        next
       }
-      mpileupFile <- paste0(workDir, '/', sample, '.',
-        hlaAllele, '.', type, '.mpileup')
 
-      cmd <- paste(samtools, ' mpileup ', sample_dir, '/', BAMfile, ' -f ',
-                   HLAfastaLoc, ' > ', mpileupFile, sep = '')
-
-      if (file.exists(mpileupFile)) {
-        logger(paste(mpileupFile, 'already exists, skipping.'))
+      if (sample %in% tumorName) {
+        type <- 'tumor'
       } else {
-        logger(cmd)
-        system(cmd)
+        type <- 'normal'
       }
-      logger(system(glue('head {mpileupFile} -n 1'), intern = T))
+
+      ## 2019-04-09 17:24 Verify not all filtered bam files are identical
+      if (any(table(tools::md5sum(file.path(sample_dir, filteredBAMfiles))) > 1)) {
+        logger('File sizes of filtered bam files: ',
+          paste(file.size(file.path(sample_dir, filteredBAMfiles)),
+            collapse = ', '))
+
+        logger('MD5 sums of filtered bam files: ',
+          paste(tools::md5sum(file.path(sample_dir, filteredBAMfiles)),
+            collapse = ', '))
+      }
+
+      ## Get pileup files for each bam
+      for (BAMfile in filteredBAMfiles) {
+        hlaAllele <- grep(pattern = 'hla',
+          x = unlist(strsplit(BAMfile, split = '\\.')), value = TRUE)
+        ## Make hlaAllele inference robust to file names that have the words
+        #$ hla_loci in them
+        if (length(hlaAllele) > 1) {
+          hlaAllele <- grep('hla_(?!loci)', hlaAllele, value = T, perl = T)
+        }
+        mpileupFile <- paste0(workDir, '/', sample, '.',
+          hlaAllele, '.', type, '.mpileup')
+
+        cmd <- paste(samtools, ' mpileup ', sample_dir, '/', BAMfile, ' -f ',
+                     HLAfastaLoc, ' > ', mpileupFile, sep = '')
+
+        if (file.exists(mpileupFile)) {
+          logger(paste(mpileupFile, 'already exists, skipping.'))
+        } else {
+          logger(cmd)
+          system(cmd)
+        }
+        logger(system(glue('head {mpileupFile} -n 1'), intern = T))
+      }
+    }
+    test_error_presence <- sapply(samples, function(sample) {
+      grepl(glue('no_filtered_bam_present_{sample}'), error_msg)
+    }) %>% any(na.rm = T)
+    if (test_error_presence) {
+      coverageStep <- F
     }
   }
   ### }}}
 
   ## {{{ Extract number of unique reads sequenced in tumor and normal
-  if (any(unique(runWithNormal)) &&
+  if (coverageStep && any(unique(runWithNormal)) &&
     (is.null(opt$normalAlignedReads) || is.null(opt$tumorAlignedReads))) {
     if (!override) {
       sample_uniq_mapped_reads <-
@@ -1063,9 +1074,6 @@ run_LOHHLA <- function(opt) {
       samples <- samples[samples %in% c(tumorName, normalName)]
     }
 
-    # ## If multiple normal samples present, sum the reads of these samples
-    # GermLineUniqMappedReads <-
-    #   sum(unlist(sample_uniq_mapped_reads)[!tumor_regions])
     GermLineUniqMappedReads <- unlist(sample_uniq_mapped_reads[normalName])
   } else {
     GermLineUniqMappedReads <- opt$normalAlignedReads
@@ -1090,11 +1098,16 @@ run_LOHHLA <- function(opt) {
       MultFactor <- 1
     }
 
-    ## {{{ Coverage step
-    if (coverageStep) {
-      combinedTable <- NULL
-      hlas <- c('hla_a', 'hla_b', 'hla_c')
-      HLAoutPut_l <- purrr::map(hlas, function(HLA_gene) {
+    combinedTable <- NULL
+    hlas <- c('hla_a', 'hla_b', 'hla_c')
+    HLAoutPut_l <- purrr::map(hlas, function(HLA_gene) {
+      HLA_As <- grep(HLA_gene, hlaAlleles, value = TRUE)
+      ## Change this to a test of whether coverage files are present
+      if (!coverageStep) {
+        return(list(message = glue('did_not_perform_coverage_{error_msg}'),
+            HLA_A_type1 = repl_NA(HLA_As[1]),
+            HLA_A_type2 = repl_NA(HLA_As[2])))
+      } else {
         logger(sprintf('analyzing coverage differences in sample: %s, hla: %s',
             sample, HLA_gene))
 
@@ -1108,7 +1121,6 @@ run_LOHHLA <- function(opt) {
           system(cmd)
         }
 
-        HLA_As <- grep(HLA_gene, hlaAlleles, value = TRUE)
         if (length(HLA_As) == 1) {
           return(list(message = 'homozygous_alleles_not_implemented',
               HLA_A_type1 = repl_NA(HLA_As[1]),
@@ -2092,39 +2104,7 @@ run_LOHHLA <- function(opt) {
             warning = function(e) { print(e); browser() }) %>%
           setdiff(NaN) %>% { . > 0 } %>% mean %>% { max(., 1 - .) * 100 }
 
-        # let's have a look at the additional features we can add in relation to integer copy numbers
-        HLA_type1copyNum_withoutBAF <- NA
-        HLA_type1copyNum_withoutBAF_lower <- NA
-        HLA_type1copyNum_withoutBAF_upper <- NA
-
-        HLA_type1copyNum_withBAF <- NA
-        HLA_type1copyNum_withBAF_lower <- NA
-        HLA_type1copyNum_withBAF_upper <- NA
-
-        HLA_type2copyNum_withoutBAF <- NA
-        HLA_type2copyNum_withoutBAF_lower <- NA
-        HLA_type2copyNum_withoutBAF_upper <- NA
-
-        HLA_type2copyNum_withBAF <- NA
-        HLA_type2copyNum_withBAF_lower <- NA
-        HLA_type2copyNum_withBAF_upper <- NA
-
-        HLA_type1copyNum_withoutBAFBin <- NA
-        HLA_type1copyNum_withoutBAFBin_lower <- NA
-        HLA_type1copyNum_withoutBAFBin_upper <- NA
-
-        HLA_type1copyNum_withBAFBin <- NA
-        HLA_type1copyNum_withBAFBin_lower <- NA
-        HLA_type1copyNum_withBAFBin_upper <- NA
-
-        HLA_type2copyNum_withoutBAFBin <- NA
-        HLA_type2copyNum_withoutBAFBin_lower <- NA
-        HLA_type2copyNum_withoutBAFBin_upper <- NA
-
-        HLA_type2copyNum_withBAFBin <- NA
-        HLA_type2copyNum_withBAFBin_lower <- NA
-        HLA_type2copyNum_withBAFBin_upper <- NA
-
+        # Additional features we can add in relation to integer copy numbers
         if (performIntegerCopyNum) {
           HLA_type1copyNum_withoutBAF <- nA_rawVal_withoutBAF
           HLA_type1copyNum_withoutBAF_lower <- nA_rawVal_withoutBAF_lower
@@ -2157,7 +2137,40 @@ run_LOHHLA <- function(opt) {
           HLA_type2copyNum_withBAFBin <- nB_rawVal_withBAF_bin
           HLA_type2copyNum_withBAFBin_lower <- nB_rawVal_withBAF_bin_lower
           HLA_type2copyNum_withBAFBin_upper <- nB_rawVal_withBAF_bin_upper
+        } else {
+          HLA_type1copyNum_withoutBAF <- NA
+          HLA_type1copyNum_withoutBAF_lower <- NA
+          HLA_type1copyNum_withoutBAF_upper <- NA
+
+          HLA_type1copyNum_withBAF <- NA
+          HLA_type1copyNum_withBAF_lower <- NA
+          HLA_type1copyNum_withBAF_upper <- NA
+
+          HLA_type2copyNum_withoutBAF <- NA
+          HLA_type2copyNum_withoutBAF_lower <- NA
+          HLA_type2copyNum_withoutBAF_upper <- NA
+
+          HLA_type2copyNum_withBAF <- NA
+          HLA_type2copyNum_withBAF_lower <- NA
+          HLA_type2copyNum_withBAF_upper <- NA
+
+          HLA_type1copyNum_withoutBAFBin <- NA
+          HLA_type1copyNum_withoutBAFBin_lower <- NA
+          HLA_type1copyNum_withoutBAFBin_upper <- NA
+
+          HLA_type1copyNum_withBAFBin <- NA
+          HLA_type1copyNum_withBAFBin_lower <- NA
+          HLA_type1copyNum_withBAFBin_upper <- NA
+
+          HLA_type2copyNum_withoutBAFBin <- NA
+          HLA_type2copyNum_withoutBAFBin_lower <- NA
+          HLA_type2copyNum_withoutBAFBin_upper <- NA
+
+          HLA_type2copyNum_withBAFBin <- NA
+          HLA_type2copyNum_withBAFBin_lower <- NA
+          HLA_type2copyNum_withBAFBin_upper <- NA
         }
+
 
         ## save some temporary files before plotting
         statistics_fn <- paste(figureDir, '/', sample, '.', HLA_gene,
@@ -2205,134 +2218,441 @@ run_LOHHLA <- function(opt) {
           numMisMatchSitesCov=numMisMatchSitesCov,
           combinedTable=combinedTable,
           propSupportiveSites=propSupportiveSites))
-      })
+      }
+    })
 
-      HLAoutPut <- tryCatch(
-        lapply(HLAoutPut_l, function(x) {
-          x <- x[setdiff(names(x), 'combinedTable')]
-          x[sapply(x, is.null)] <- NA;
-          x
-        }) %>% rbindlist(fill = T)
-      , error = function(e) { print(e); browser() })
+    HLAoutPut <- tryCatch(
+      lapply(HLAoutPut_l, function(x) {
+        x <- x[setdiff(names(x), 'combinedTable')]
+        x[sapply(x, is.null)] <- NA;
+        x
+      }) %>% rbindlist(fill = T)
+    , error = function(e) { print(e); browser() })
 
-      combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
-          as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']])))
-        , error = function(e) { print(e); NULL })
-      combinedTable <- tryCatch(rbindlist(combinedTable, fill = T),
-        error = function(e) { print(e); NULL })
-    }
-    ### Coverage step }}}
+    combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
+        as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']])))
+      , error = function(e) { print(e); NULL })
+    combinedTable <- tryCatch(rbindlist(combinedTable, fill = T),
+      error = function(e) { print(e); NULL })
+  }
+  ### Coverage step }}}
 
-    ## {{{ Plotting step
-    if (plottingStep) {
-      logger('plotting for sample: ', sample)
-      min_coverage_fn <-
-        paste(figureDir, '/', sample, '.minCoverage_', minCoverageFilter,
-          '.HLA.pdf', sep = '')
-      pdf(min_coverage_fn, width = 10, height = 6)
+  ## {{{ Plotting step
+  if (plottingStep) {
+    logger('plotting for sample: ', sample)
+    min_coverage_fn <-
+      paste(figureDir, '/', sample, '.minCoverage_', minCoverageFilter,
+        '.HLA.pdf', sep = '')
+    pdf(min_coverage_fn, width = 10, height = 6)
 
-      for (HLA_gene in unique(substr(hlaAlleles, 1, 5))) {
-        # if (file.exists(paste(figureDir, '/', sample, '.',
-        #       HLA_gene, '.tmp.data.plots.RData', sep = ''))) {
-        #   load(paste(figureDir, '/', sample, '.', HLA_gene,
-        #       '.tmp.data.plots.RData', sep = ''))
-        # }
+    for (HLA_gene in unique(substr(hlaAlleles, 1, 5))) {
+      # if (file.exists(paste(figureDir, '/', sample, '.',
+      #       HLA_gene, '.tmp.data.plots.RData', sep = ''))) {
+      #   load(paste(figureDir, '/', sample, '.', HLA_gene,
+      #       '.tmp.data.plots.RData', sep = ''))
+      # }
 
-        if (F) {
-          msg <- paste('Run with coverageStep == TRUE for : ', sample,
-            ' first!', sep = '')
-          howToWarn(msg)
-          logger(msg)
-          next
+      if (F) {
+        msg <- paste('Run with coverageStep == TRUE for : ', sample,
+          ' first!', sep = '')
+        howToWarn(msg)
+        logger(msg)
+        next
+      }
+
+      # if (!exists('regionSpecOutPut')) {
+      #   msg <- paste('\ncoverageStep did not run to completion for: ',
+      #     HLA_gene, ' in ', sample, '! ', '\n', sep = '')
+      #   logger(msg)
+      #   stop(msg)
+      # }
+
+      ## getting exons for both alleles
+      ## {{{ Type 1
+      HLA_A_type1DatFormat <- unlist(strsplit(HLA_A_type1, split = "_")) %>%
+        .[2:length(unlist(strsplit(HLA_A_type1, split = "_")))]
+      HLA_A_type1Formatted <- toupper(paste('HLA-', HLA_A_type1DatFormat[1],
+          '\\*',
+          paste(HLA_A_type1DatFormat[2:length(HLA_A_type1DatFormat)],
+            collapse = ':'), sep = ''))
+      cmd <- paste('awk \'/^DE   ', HLA_A_type1Formatted,
+        ", / {p = 1}; p; /Sequence/ {p = 0}\' ", HLAexonLoc, sep = '')
+      awk.result <- system(cmd, intern = TRUE)
+      HLAtype1exons <- grep('^FT   exon', awk.result, value = TRUE)
+      HLAtype1exons_s <- strsplit(HLAtype1exons, split = " ")
+      HLAtype1exons <- do.call(rbind, HLAtype1exons_s)
+      HLAtype1exons <- HLAtype1exons[, ncol(HLAtype1exons)]
+      if (length(HLAtype1exons) != 0) {
+        HLAtype1exonTable <- c()
+        for (i in 1:length(HLAtype1exons)) {
+          HLAtype1exonTable <- rbind(HLAtype1exonTable,
+            (unlist(strsplit(HLAtype1exons[i], split = "\\.\\."))))
         }
+      }
+      ## }}} Type 1
+      ## {{{ Type 2
+      HLA_A_type2DatFormat <- unlist(strsplit(HLA_A_type2, split = "_")) %>%
+        .[2:length(unlist(strsplit(HLA_A_type2, split = "_")))]
+      HLA_A_type2Formatted <- toupper(paste('HLA-', HLA_A_type2DatFormat[2],
+          '\\*',
+          paste(HLA_A_type2DatFormat[2:length(HLA_A_type2DatFormat)],
+            collapse = ':'), sep = ''))
+      cmd <- paste("awk \'/^DE   ", HLA_A_type2Formatted,
+        ", / {p = 2}; p; /Sequence/ {p = 0}\' ", HLAexonLoc, sep = '')
+      awk.result <- system(cmd, intern = TRUE)
+      HLAtype2exons <- grep('^FT   exon', awk.result, value = TRUE)
+      HLAtype2exons_s <- strsplit(HLAtype2exons, split = " ")
+      HLAtype2exons <- do.call(rbind, HLAtype2exons_s)
+      HLAtype2exons <- HLAtype2exons[, ncol(HLAtype2exons)]
+      if (length(HLAtype2exons) != 0) {
+        HLAtype2exonTable <- c()
+        for (i in 2:length(HLAtype2exons)) {
+          HLAtype2exonTable <- rbind(HLAtype2exonTable,
+            (unlist(strsplit(HLAtype2exons[i], split = "\\.\\."))))
+        }
+      }
+      ## }}} Type 2
 
-        # if (!exists('regionSpecOutPut')) {
-        #   msg <- paste('\ncoverageStep did not run to completion for: ',
-        #     HLA_gene, ' in ', sample, '! ', '\n', sep = '')
-        #   logger(msg)
-        #   stop(msg)
-        # }
+      ## Some things to plot if there is a normal sample
+      if (runWithNormal) {
+        ## Rolling mean
+        tryCatch({
+        par(mfrow = c(2, 1))
+        par(mar = c(2, 5, 2, 2))
+        barplot(c(rollmean(HLA_A_type2tumorCov*MultFactor, min(500, length(HLA_A_type2tumorCov)))/rollmean(HLA_A_type2normalCov, min(500, length(HLA_A_type2normalCov)))), ylim = c(0, 3), xaxt = 'n', main = HLA_A_type2, las = 1, ylab = 'Tumor/Normal Coverage')
+        abline(h = 1, lty = 'dashed', col = 'blue', lwd = 1.5)
+        barplot(c(rollmean(HLA_A_type1tumorCov*MultFactor,
+          min(500, length(HLA_A_type1tumorCov))) /
+            rollmean(HLA_A_type1normalCov,
+          min(500, length(HLA_A_type1normalCov)))),
+          ylim = c(0, 3), xaxt = 'n', main = HLA_A_type1, las = 1,
+          ylab = 'Tumor/Normal Coverage')
+        abline(h = 1, lty = 'dashed', col = 'blue', lwd = 1.5)
+        }, error = function(e) return(NULL))
 
-        ## getting exons for both alleles
-        ## {{{ Type 1
-        HLA_A_type1DatFormat <- unlist(strsplit(HLA_A_type1, split = "_")) %>%
-          .[2:length(unlist(strsplit(HLA_A_type1, split = "_")))]
-        HLA_A_type1Formatted <- toupper(paste('HLA-', HLA_A_type1DatFormat[1],
-            '\\*',
-            paste(HLA_A_type1DatFormat[2:length(HLA_A_type1DatFormat)],
-              collapse = ':'), sep = ''))
-        cmd <- paste('awk \'/^DE   ', HLA_A_type1Formatted,
-          ", / {p = 1}; p; /Sequence/ {p = 0}\' ", HLAexonLoc, sep = '')
-        awk.result <- system(cmd, intern = TRUE)
-        HLAtype1exons <- grep('^FT   exon', awk.result, value = TRUE)
-        HLAtype1exons_s <- strsplit(HLAtype1exons, split = " ")
-        HLAtype1exons <- do.call(rbind, HLAtype1exons_s)
-        HLAtype1exons <- HLAtype1exons[, ncol(HLAtype1exons)]
+        ## Log ratio and density of mismatches
+        tryCatch({
+        par(mfrow = c(1, 1))
+        par(mar = c(5, 5, 5, 2))
+        plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2,
+              HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)),
+          lim = c(-3, 3), col = '#3182bd99', pch = 16,
+          lab = 'HLA genomic position',
+          lab = 'Log Ratio',
+          ain = c(paste("HLA raw balance", sample)),
+          ex = 0.75, ype = 'n' , as = 1)
+        ## add the exonic positions
         if (length(HLAtype1exons) != 0) {
-          HLAtype1exonTable <- c()
-          for (i in 1:length(HLAtype1exons)) {
-            HLAtype1exonTable <- rbind(HLAtype1exonTable,
-              (unlist(strsplit(HLAtype1exons[i], split = "\\.\\."))))
+          for (i in 1:nrow(HLAtype1exonTable)) {
+            rect(xleft = as.numeric(HLAtype1exonTable[i, 1]),
+              xright = as.numeric(HLAtype1exonTable[i, 2]),
+              ybottom = -2, ytop = 2, col = '#bdbdbd25', border = FALSE)
           }
         }
-        ## }}} Type 1
-        ## {{{ Type 2
-        HLA_A_type2DatFormat <- unlist(strsplit(HLA_A_type2, split = "_")) %>%
-          .[2:length(unlist(strsplit(HLA_A_type2, split = "_")))]
-        HLA_A_type2Formatted <- toupper(paste('HLA-', HLA_A_type2DatFormat[2],
-            '\\*',
-            paste(HLA_A_type2DatFormat[2:length(HLA_A_type2DatFormat)],
-              collapse = ':'), sep = ''))
-        cmd <- paste("awk \'/^DE   ", HLA_A_type2Formatted,
-          ", / {p = 2}; p; /Sequence/ {p = 0}\' ", HLAexonLoc, sep = '')
-        awk.result <- system(cmd, intern = TRUE)
-        HLAtype2exons <- grep('^FT   exon', awk.result, value = TRUE)
-        HLAtype2exons_s <- strsplit(HLAtype2exons, split = " ")
-        HLAtype2exons <- do.call(rbind, HLAtype2exons_s)
-        HLAtype2exons <- HLAtype2exons[, ncol(HLAtype2exons)]
+
         if (length(HLAtype2exons) != 0) {
-          HLAtype2exonTable <- c()
-          for (i in 2:length(HLAtype2exons)) {
-            HLAtype2exonTable <- rbind(HLAtype2exonTable,
-              (unlist(strsplit(HLAtype2exons[i], split = "\\.\\."))))
+          for (i in 1:nrow(HLAtype2exonTable)) {
+            rect(xleft = as.numeric(HLAtype2exonTable[i, 1]),
+              xright = as.numeric(HLAtype2exonTable[i, 2]),
+              ybottom = -2, ytop = 2, col = '#bdbdbd25', border = FALSE)
           }
         }
-        ## }}} Type 2
 
-        ## Some things to plot if there is a normal sample
-        if (runWithNormal) {
-          ## Rolling mean
-          tryCatch({
-          par(mfrow = c(2, 1))
-          par(mar = c(2, 5, 2, 2))
-          barplot(c(rollmean(HLA_A_type2tumorCov*MultFactor, min(500, length(HLA_A_type2tumorCov)))/rollmean(HLA_A_type2normalCov, min(500, length(HLA_A_type2normalCov)))), ylim = c(0, 3), xaxt = 'n', main = HLA_A_type2, las = 1, ylab = 'Tumor/Normal Coverage')
-          abline(h = 1, lty = 'dashed', col = 'blue', lwd = 1.5)
-          barplot(c(rollmean(HLA_A_type1tumorCov*MultFactor,
-            min(500, length(HLA_A_type1tumorCov))) /
-              rollmean(HLA_A_type1normalCov,
-            min(500, length(HLA_A_type1normalCov)))),
-            ylim = c(0, 3), xaxt = 'n', main = HLA_A_type1, las = 1,
-            ylab = 'Tumor/Normal Coverage')
-          abline(h = 1, lty = 'dashed', col = 'blue', lwd = 1.5)
-          }, error = function(e) return(NULL))
+        points(c(names(HLA_A_type2normalCov)),
+          log2(c((HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)),
+          col = '#3182bd99', pch = 16)
+        points(names(HLA_A_type2normalCov)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = 'black', bg = '#3182bd99', pch = 21, cex = 1)
+        points(names(HLA_A_type1normalCov), log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor), col = '#de2d2699', pch = 16, cex = 0.75)
+        points(names(HLA_A_type1normalCov)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = 'black', bg = '#de2d2699', pch = 21, cex = 1)
 
-          ## Log ratio and density of mismatches
+        points(missMatchPositions$diffSeq1,
+          rep(-3, length(missMatchPositions$diffSeq1)),
+          col = '#63636399', bg = '#63636399', pch = 21, cex = 1)
+        d <- density(missMatchPositions$diffSeq1, bw = 40)
+        d$y <- (d$y/max(d$y))
+        d$y <- d$y -3
+        lines(d)
+        abline(h = 0, lty = 'dashed')
+
+        legend('topright', legend = c(HLA_A_type2, HLA_A_type1),
+               lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n',
+               cex = 1, lwd = 3)
+        }, error = function(e) return(NULL))
+
+        tryCatch({
+        # normal coverage comparison
+        plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2))
+             , lim = c(0, max(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#3182bd99', pch = 16
+             , lab = 'HLA genomic position'
+             , lab = 'Coverage'
+             , ain = c(paste("HLA normal coverage", sample))
+             , ex = 0.75
+             , ype = 'n'
+             , as = 1)
+        # add the exonic positions
+        if (length(HLAtype1exons)!= 0) {
+          for (i in 1:nrow(HLAtype1exonTable)) {
+            rect(xleft = as.numeric(HLAtype1exonTable[i, 1]), xright = as.numeric(HLAtype1exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
+          }
+        }
+
+        if (length(HLAtype2exons)!= 0) {
+          for (i in 1:nrow(HLAtype2exonTable)) {
+            rect(xleft = as.numeric(HLAtype2exonTable[i, 1]), xright = as.numeric(HLAtype2exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
+          }
+        }
+
+        lines(c(HLA_A_type2normal$V2), c(HLA_A_type2normalCov), col = '#3182bd')
+        lines(c(HLA_A_type1normal$V2), c(HLA_A_type1normalCov), col = '#de2d26')
+        legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
+               lty = 1, col = c('#3182bd', '#de2d26'), bty = 'n', cex = 1, lwd = 3)
+
+        points(c(HLA_A_type1normal$V2)[HLA_A_type1normal$V2 %in% missMatchPositions$diffSeq1], c(HLA_A_type1normalCov)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = '#de2d26', pch = 16)
+        points(c(HLA_A_type2normal$V2)[HLA_A_type2normal$V2 %in% missMatchPositions$diffSeq2], c(HLA_A_type2normalCov)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = '#3182bd', pch = 16)
+        }, error = function(e) return(NULL))
+
+        tryCatch({
+        # tumor and normal coverage for allele 1
+        plot(names(HLA_A_type1normalCov), apply(cbind(HLA_A_type1tumorCov*MultFactor, HLA_A_type1normalCov), 1, max), type = 'n', xlab = 'HLA genomic position', ylab = 'Coverage', las = 1, main = HLA_A_type1, ylim = c(0, max(c(HLA_A_type1tumorCov, HLA_A_type1normalCov))))
+        if (length(HLAtype1exons)!= 0)
+        {
+          for (i in 1:nrow(HLAtype1exonTable))
+          {
+            rect(xleft = as.numeric(HLAtype1exonTable[i, 1]), xright = as.numeric(HLAtype1exonTable[i, 2]), ybottom = 0, ytop = max(c(HLA_A_type1tumorCov, HLA_A_type1normalCov)), col = '#bdbdbd50', border = FALSE)
+          }
+        }
+
+        lines(c(HLA_A_type1normal$V2), c(HLA_A_type1tumorCov*MultFactor), col = '#3182bd')
+        lines(c(HLA_A_type1normal$V2), c(HLA_A_type1normalCov), col = '#9ecae1')
+        legend('topleft', legend = c('tumour', 'normal') ,
+               lty = 1, col = c('#3182bd', '#9ecae1'), bty = 'n', cex = 1, lwd = 3)
+
+        points(c(HLA_A_type1normal$V2)[HLA_A_type1normal$V2 %in% missMatchPositions$diffSeq1], c(HLA_A_type1tumorCov*MultFactor)[names(HLA_A_type1tumorCov) %in% missMatchPositions$diffSeq1], col = '#3182bd', pch = 16)
+        }, error = function(e) return(NULL))
+
+        tryCatch({
+        # tumor and normal coverage for allele 2
+        plot(c(HLA_A_type2normal$V2), apply(cbind(HLA_A_type2tumorCov*MultFactor, HLA_A_type2normalCov), 1, max), type = 'n', xlab = 'HLA genomic position', ylab = 'Coverage', las = 1, main = HLA_A_type2, ylim = c(0, max(c(HLA_A_type2tumorCov, HLA_A_type2normalCov))))
+        if (length(HLAtype2exons)!= 0)
+        {
+          for (i in 1:nrow(HLAtype2exonTable))
+          {
+            rect(xleft = as.numeric(HLAtype2exonTable[i, 1]), xright = as.numeric(HLAtype2exonTable[i, 2]), ybottom = 0, ytop = max(c(HLA_A_type2tumorCov, HLA_A_type2normalCov)), col = '#bdbdbd50', border = FALSE)
+          }
+        }
+
+        lines(c(HLA_A_type2normal$V2), c(HLA_A_type2tumorCov*MultFactor), col = '#3182bd')
+        lines(c(HLA_A_type2normal$V2), c(HLA_A_type2normalCov), col = '#9ecae1')
+        legend('topleft', legend = c('tumour', 'normal') ,
+               lty = 1, col = c('#3182bd', '#9ecae1'), bty = 'n', cex = 1, lwd = 3)
+        # points(c(HLA_A_type2normal$V2)[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], c(HLA_A_type2tumorCov)[names(HLA_A_type2tumorCov) %in% missMatchPositions$diffSeq2], col = '#3182bd', pch = 16)
+        points(c(HLA_A_type2normal$V2)[HLA_A_type2normal$V2 %in% missMatchPositions$diffSeq2], c(HLA_A_type2tumorCov*MultFactor)[names(HLA_A_type2tumorCov*MultFactor) %in% missMatchPositions$diffSeq2], col = '#3182bd', pch = 16)
+        }, error = function(e) return(NULL))
+
+
+
+        tryCatch({
+        #let's now just plot the mismatch positions
+        plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2, HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)), ylim = c(-2, 2), col = '#3182bd99', pch = 16
+             , lab = 'HLA genomic position'
+             , lab = 'Log Ratio'
+             , ain = c(paste("HLA raw balance", sample))
+             , ex = 0.75
+             , ype = 'n')
+        points(c(HLA_A_type2normal$V2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2],
+          log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = '#3182bd99', pch = 16, cex = 1)
+        points(c(HLA_A_type1normal$V2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1],
+          log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = '#de2d2699', pch = 16, cex = 1)
+        abline(h = 0, lty = 'dashed')
+        }, error = function(e) return(NULL))
+
+      }
+
+      ## fewer things to plot if there's not a normal sample
+      if (!runWithNormal) {
+        tryCatch({
+        par(mfrow = c(2, 1))
+        par(mar = c(2, 5, 2, 2))
+        Ymax <- max(c(HLA_A_type1tumorCov, HLA_A_type2tumorCov))+100
+
+        barplot(c(rollmean(HLA_A_type1tumorCov, 150)),
+          ylim = c(0, Ymax), xaxt = 'n', main = HLA_A_type1,
+          las = 1, col = '#de2d2699', border = '#de2d2650')
+        abline(h = median(HLA_A_type1tumorCov), lty = 'dashed',
+          col = '#de2d26', lwd = 1.5, na.rm = TRUE)
+        abline(h = median(HLA_A_type2tumorCov), lty = 'dashed',
+          col = '#3182bd', lwd = 1.5, na.rm = TRUE)
+        barplot(c(rollmean(HLA_A_type2tumorCov, 150)),
+          ylim = c(0, Ymax), xaxt = 'n', main = HLA_A_type2,
+          las = 1, col = '#3182bd', border = '#3182bd50')
+        abline(h = median(HLA_A_type1tumorCov), lty = 'dashed',
+          col = '#de2d26', lwd = 1.5, na.rm = TRUE)
+        abline(h = median(HLA_A_type2tumorCov), lty = 'dashed',
+          col = '#3182bd', lwd = 1.5, na.rm = TRUE)
+        }, error = function(e) return(NULL))
+
+        tryCatch({
+        par(mfrow = c(1, 1))
+        par(mar = c(5, 5, 5, 2))
+        plot(c(1:max(c(HLA_A_type1tumor$V2, HLA_A_type2tumor$V2)))
+             , lim = c(0, Ymax), col = '#3182bd99', pch = 16
+             , lab = 'HLA genomic position'
+             , lab = 'Coverage'
+             , ain = c(paste("HLA raw coverage", sample))
+             , ex = 0.75
+             , ype = 'n'
+             , as = 1)
+
+        points(HLA_A_type1tumor$V2, HLA_A_type1tumor$V4, col = '#de2d2699', pch = 16)
+        points(HLA_A_type1tumor$V2[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], HLA_A_type1tumor$V4[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], col = 'black', bg = '#de2d2699', pch = 21, cex = 1)
+
+        points(HLA_A_type2tumor$V2, HLA_A_type2tumor$V4, col = '#3182bd99', pch = 16)
+        points(HLA_A_type2tumor$V2[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], HLA_A_type2tumor$V4[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], col = 'black', bg = '#3182bd99', pch = 21, cex = 1)
+
+        legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
+               lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n', cex = 1, lwd = 3)
+        }, error = function(e) return(NULL))
+
+
+        tryCatch({
+        plot(c(1:max(c(HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)))
+             , lim = c(0, Ymax), col = '#3182bd99', pch = 16
+             , lab = 'HLA genomic position'
+             , lab = 'Coverage'
+             , ain = c(paste("HLA raw balance", sample))
+             , ex = 0.75
+             , ype = 'n'
+             , as = 1)
+        points(HLA_A_type1tumor$V2[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], HLA_A_type1tumor$V4[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], col = '#de2d2699', pch = 16, cex = 1)
+        points(HLA_A_type2tumor$V2[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], HLA_A_type2tumor$V4[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], col = '#3182bd99', pch = 16, cex = 1)
+
+        legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
+               lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n', cex = 1, lwd = 3)
+        }, error = function(e) return(NULL))
+
+      }
+
+      ## next, let's plot the predicted integer copy numbers
+      if (!is.na(tumorPurity) && nrow(combinedTable) != 0) {
+        tryCatch({
+        plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2, HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)), ylim = c(-0.5, max(round(c(combinedTable$nBcombined, combinedTable$nAcombined)), na.rm = TRUE)+1), col = '#3182bd99', pch = 16
+             , lab = 'HLA genomic position'
+             , lab = 'Copy Number'
+             , ain = c(paste("HLA copyNum balance", sample))
+             , ex = 0.75
+             , ype = 'n'
+             , axt = 'n')
+
+        if (length(HLAtype1exons)!= 0) {
+          for (i in 1:nrow(HLAtype1exonTable)) {
+            rect(xleft = as.numeric(HLAtype1exonTable[i, 1]), xright = as.numeric(HLAtype1exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
+          }
+        }
+
+        if (length(HLAtype2exons)!= 0) {
+          for (i in 1:nrow(HLAtype2exonTable)) {
+            rect(xleft = as.numeric(HLAtype2exonTable[i, 1]), xright = as.numeric(HLAtype2exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
+          }
+        }
+
+        if (useLogRbin) {
+          axis(side = 2, at = 0:max(round(c(combinedTable$nAcombinedBin, combinedTable$nBcombinedBin)), na.rm = TRUE), las = 1)
+          points(combinedTable$missMatchseq1, combinedTable$nAcombinedBin, col = '#de2d2699', pch = 16, cex = 1)
+          points(combinedTable$missMatchseq2, combinedTable$nBcombinedBin, col = '#3182bd99', pch = 16, cex = 1)
+
+          abline(h = nA_rawVal_withBAF_bin, lty = 'dashed', col = '#de2d2699', lwd = 3)
+          abline(h = nB_rawVal_withBAF_bin, lty = 'dashed', col = '#3182bd99', lwd = 3)
+
+          legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
+                 lty = 1, col = c('#3182bd', '#de2d26'), bty = 'n', cex = 1, lwd = 3)
+        }
+
+        if (!useLogRbin) {
+          axis(side = 2, at = 0:max(round(c(combinedTable$nAcombined, combinedTable$nBcombined)), na.rm = TRUE), las = 1)
+          points(combinedTable$missMatchseq1, combinedTable$nAcombined, col = '#de2d2699', pch = 16, cex = 1)
+          points(combinedTable$missMatchseq2, combinedTable$nBcombined, col = '#3182bd99', pch = 16, cex = 1)
+
+          abline(h = nA_rawVal_withBAF, lty = 'dashed', col = '#de2d2699', lwd = 3)
+          abline(h = nB_rawVal_withBAF, lty = 'dashed', col = '#3182bd99', lwd = 3)
+
+          legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
+                 lty = 1, col = c('#3182bd', '#de2d26'), bty = 'n', cex = 1, lwd = 3)
+        }
+        }, error = function(e) return(NULL))
+
+      }
+
+      if (!is.na(tumorPurity) && nrow(combinedTable) != 0) {
+        if (!useLogRbin) {
           tryCatch({
-          par(mfrow = c(1, 1))
-          par(mar = c(5, 5, 5, 2))
           plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2,
                 HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)),
-            lim = c(-3, 3), col = '#3182bd99', pch = 16,
-            lab = 'HLA genomic position',
-            lab = 'Log Ratio',
-            ain = c(paste("HLA raw balance", sample)),
-            ex = 0.75, ype = 'n' , as = 1)
-          ## add the exonic positions
+            ylim = c(-0.5, max(round(c(combinedTable$nAsep,
+                    combinedTable$nBsep)), na.rm = TRUE) + 1),
+            col = '#3182bd99', pch = 16, lab = 'HLA genomic position',
+            lab = 'Copy Number',
+            ain = c(paste("HLA copyNum balance", sample)),
+            ex = 0.75, ype = 'n', axt = 'n')
+          axis(side = 2,
+            at = 0:max(round(c(combinedTable$nAsep, combinedTable$nBsep))),
+            las = 1)
+
+          if (length(HLAtype1exons)!= 0) {
+            for (i in 1:nrow(HLAtype1exonTable)) {
+              rect(xleft = as.numeric(HLAtype1exonTable[i, 1]),
+                xright = as.numeric(HLAtype1exonTable[i, 2]),
+                ybottom = -2,
+                ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
+                col = '#bdbdbd25', border = FALSE)
+            }
+          }
+
+          if (length(HLAtype2exons)!= 0) {
+            for (i in 1:nrow(HLAtype2exonTable)) {
+              rect(xleft = as.numeric(HLAtype2exonTable[i, 1]),
+                xright = as.numeric(HLAtype2exonTable[i, 2]),
+                ybottom = -2,
+                ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
+                col = '#bdbdbd25', border = FALSE)
+            }
+          }
+
+          points(combinedTable$missMatchseq1, combinedTable$nAsep,
+            col = '#de2d2699', pch = 16, cex = 1)
+          points(combinedTable$missMatchseq2, combinedTable$nBsep,
+            col = '#3182bd99', pch = 16, cex = 1)
+
+          abline(h = nA_rawVal_withoutBAF, lty = 'dashed',
+            col = '#de2d2699', lwd = 3)
+          abline(h = nB_rawVal_withoutBAF, lty = 'dashed',
+            col = '#3182bd99', lwd = 3)
+
+          legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
+            lty = 1, col = c('#3182bd', '#de2d26'),
+            bty = 'n', cex = 1, lwd = 3)
+          }, error = function(e) return(NULL))
+        }
+
+        if (useLogRbin) {
+          tryCatch({
+          plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2,
+                HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)),
+            ylim = c(-0.5, max(round(c(combinedTable$nAsep, combinedTable$nBsep)),
+                na.rm = TRUE) + 1), col = '#3182bd99', pch = 16,
+            lab = 'HLA genomic position', lab = 'Copy Number',
+            ain = c(paste("HLA copyNum balance", sample)),
+            ex = 0.75, ype = 'n', axt = 'n')
+          axis(side = 2,
+            at = 0:max(round(c(combinedTable$nAsep, combinedTable$nBsep))),
+            las = 1)
+
           if (length(HLAtype1exons) != 0) {
             for (i in 1:nrow(HLAtype1exonTable)) {
               rect(xleft = as.numeric(HLAtype1exonTable[i, 1]),
                 xright = as.numeric(HLAtype1exonTable[i, 2]),
-                ybottom = -2, ytop = 2, col = '#bdbdbd25', border = FALSE)
+                ybottom = -2,
+                ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
+                col = '#bdbdbd25', border = FALSE)
             }
           }
 
@@ -2340,506 +2660,198 @@ run_LOHHLA <- function(opt) {
             for (i in 1:nrow(HLAtype2exonTable)) {
               rect(xleft = as.numeric(HLAtype2exonTable[i, 1]),
                 xright = as.numeric(HLAtype2exonTable[i, 2]),
-                ybottom = -2, ytop = 2, col = '#bdbdbd25', border = FALSE)
+                ybottom = -2,
+                ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
+                col = '#bdbdbd25', border = FALSE)
             }
           }
 
-          points(c(names(HLA_A_type2normalCov)),
-            log2(c((HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)),
-            col = '#3182bd99', pch = 16)
-          points(names(HLA_A_type2normalCov)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = 'black', bg = '#3182bd99', pch = 21, cex = 1)
-          points(names(HLA_A_type1normalCov), log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor), col = '#de2d2699', pch = 16, cex = 0.75)
-          points(names(HLA_A_type1normalCov)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = 'black', bg = '#de2d2699', pch = 21, cex = 1)
+          points(combinedTable$missMatchseq1,
+            combinedTable$nAsepBin, col = '#de2d2699', pch = 16, cex = 1)
+          points(combinedTable$missMatchseq2,
+            combinedTable$nBsepBin, col = '#3182bd99', pch = 16, cex = 1)
 
-          points(missMatchPositions$diffSeq1,
-            rep(-3, length(missMatchPositions$diffSeq1)),
-            col = '#63636399', bg = '#63636399', pch = 21, cex = 1)
-          d <- density(missMatchPositions$diffSeq1, bw = 40)
-          d$y <- (d$y/max(d$y))
-          d$y <- d$y -3
-          lines(d)
-          abline(h = 0, lty = 'dashed')
-
-          legend('topright', legend = c(HLA_A_type2, HLA_A_type1),
-                 lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n',
-                 cex = 1, lwd = 3)
-          }, error = function(e) return(NULL))
-
-          tryCatch({
-          # normal coverage comparison
-          plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2))
-               , lim = c(0, max(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#3182bd99', pch = 16
-               , lab = 'HLA genomic position'
-               , lab = 'Coverage'
-               , ain = c(paste("HLA normal coverage", sample))
-               , ex = 0.75
-               , ype = 'n'
-               , as = 1)
-          # add the exonic positions
-          if (length(HLAtype1exons)!= 0) {
-            for (i in 1:nrow(HLAtype1exonTable)) {
-              rect(xleft = as.numeric(HLAtype1exonTable[i, 1]), xright = as.numeric(HLAtype1exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
-            }
-          }
-
-          if (length(HLAtype2exons)!= 0) {
-            for (i in 1:nrow(HLAtype2exonTable)) {
-              rect(xleft = as.numeric(HLAtype2exonTable[i, 1]), xright = as.numeric(HLAtype2exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
-            }
-          }
-
-          lines(c(HLA_A_type2normal$V2), c(HLA_A_type2normalCov), col = '#3182bd')
-          lines(c(HLA_A_type1normal$V2), c(HLA_A_type1normalCov), col = '#de2d26')
-          legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-                 lty = 1, col = c('#3182bd', '#de2d26'), bty = 'n', cex = 1, lwd = 3)
-
-          points(c(HLA_A_type1normal$V2)[HLA_A_type1normal$V2 %in% missMatchPositions$diffSeq1], c(HLA_A_type1normalCov)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = '#de2d26', pch = 16)
-          points(c(HLA_A_type2normal$V2)[HLA_A_type2normal$V2 %in% missMatchPositions$diffSeq2], c(HLA_A_type2normalCov)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = '#3182bd', pch = 16)
-          }, error = function(e) return(NULL))
-
-          tryCatch({
-          # tumor and normal coverage for allele 1
-          plot(names(HLA_A_type1normalCov), apply(cbind(HLA_A_type1tumorCov*MultFactor, HLA_A_type1normalCov), 1, max), type = 'n', xlab = 'HLA genomic position', ylab = 'Coverage', las = 1, main = HLA_A_type1, ylim = c(0, max(c(HLA_A_type1tumorCov, HLA_A_type1normalCov))))
-          if (length(HLAtype1exons)!= 0)
-          {
-            for (i in 1:nrow(HLAtype1exonTable))
-            {
-              rect(xleft = as.numeric(HLAtype1exonTable[i, 1]), xright = as.numeric(HLAtype1exonTable[i, 2]), ybottom = 0, ytop = max(c(HLA_A_type1tumorCov, HLA_A_type1normalCov)), col = '#bdbdbd50', border = FALSE)
-            }
-          }
-
-          lines(c(HLA_A_type1normal$V2), c(HLA_A_type1tumorCov*MultFactor), col = '#3182bd')
-          lines(c(HLA_A_type1normal$V2), c(HLA_A_type1normalCov), col = '#9ecae1')
-          legend('topleft', legend = c('tumour', 'normal') ,
-                 lty = 1, col = c('#3182bd', '#9ecae1'), bty = 'n', cex = 1, lwd = 3)
-
-          points(c(HLA_A_type1normal$V2)[HLA_A_type1normal$V2 %in% missMatchPositions$diffSeq1], c(HLA_A_type1tumorCov*MultFactor)[names(HLA_A_type1tumorCov) %in% missMatchPositions$diffSeq1], col = '#3182bd', pch = 16)
-          }, error = function(e) return(NULL))
-
-          tryCatch({
-          # tumor and normal coverage for allele 2
-          plot(c(HLA_A_type2normal$V2), apply(cbind(HLA_A_type2tumorCov*MultFactor, HLA_A_type2normalCov), 1, max), type = 'n', xlab = 'HLA genomic position', ylab = 'Coverage', las = 1, main = HLA_A_type2, ylim = c(0, max(c(HLA_A_type2tumorCov, HLA_A_type2normalCov))))
-          if (length(HLAtype2exons)!= 0)
-          {
-            for (i in 1:nrow(HLAtype2exonTable))
-            {
-              rect(xleft = as.numeric(HLAtype2exonTable[i, 1]), xright = as.numeric(HLAtype2exonTable[i, 2]), ybottom = 0, ytop = max(c(HLA_A_type2tumorCov, HLA_A_type2normalCov)), col = '#bdbdbd50', border = FALSE)
-            }
-          }
-
-          lines(c(HLA_A_type2normal$V2), c(HLA_A_type2tumorCov*MultFactor), col = '#3182bd')
-          lines(c(HLA_A_type2normal$V2), c(HLA_A_type2normalCov), col = '#9ecae1')
-          legend('topleft', legend = c('tumour', 'normal') ,
-                 lty = 1, col = c('#3182bd', '#9ecae1'), bty = 'n', cex = 1, lwd = 3)
-          # points(c(HLA_A_type2normal$V2)[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], c(HLA_A_type2tumorCov)[names(HLA_A_type2tumorCov) %in% missMatchPositions$diffSeq2], col = '#3182bd', pch = 16)
-          points(c(HLA_A_type2normal$V2)[HLA_A_type2normal$V2 %in% missMatchPositions$diffSeq2], c(HLA_A_type2tumorCov*MultFactor)[names(HLA_A_type2tumorCov*MultFactor) %in% missMatchPositions$diffSeq2], col = '#3182bd', pch = 16)
-          }, error = function(e) return(NULL))
-
-
-
-          tryCatch({
-          #let's now just plot the mismatch positions
-          plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2, HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)), ylim = c(-2, 2), col = '#3182bd99', pch = 16
-               , lab = 'HLA genomic position'
-               , lab = 'Log Ratio'
-               , ain = c(paste("HLA raw balance", sample))
-               , ex = 0.75
-               , ype = 'n')
-          points(c(HLA_A_type2normal$V2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2],
-            log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = '#3182bd99', pch = 16, cex = 1)
-          points(c(HLA_A_type1normal$V2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1],
-            log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = '#de2d2699', pch = 16, cex = 1)
-          abline(h = 0, lty = 'dashed')
-          }, error = function(e) return(NULL))
-
-        }
-
-        ## fewer things to plot if there's not a normal sample
-        if (!runWithNormal) {
-          tryCatch({
-          par(mfrow = c(2, 1))
-          par(mar = c(2, 5, 2, 2))
-          Ymax <- max(c(HLA_A_type1tumorCov, HLA_A_type2tumorCov))+100
-
-          barplot(c(rollmean(HLA_A_type1tumorCov, 150)),
-            ylim = c(0, Ymax), xaxt = 'n', main = HLA_A_type1,
-            las = 1, col = '#de2d2699', border = '#de2d2650')
-          abline(h = median(HLA_A_type1tumorCov), lty = 'dashed',
-            col = '#de2d26', lwd = 1.5, na.rm = TRUE)
-          abline(h = median(HLA_A_type2tumorCov), lty = 'dashed',
-            col = '#3182bd', lwd = 1.5, na.rm = TRUE)
-          barplot(c(rollmean(HLA_A_type2tumorCov, 150)),
-            ylim = c(0, Ymax), xaxt = 'n', main = HLA_A_type2,
-            las = 1, col = '#3182bd', border = '#3182bd50')
-          abline(h = median(HLA_A_type1tumorCov), lty = 'dashed',
-            col = '#de2d26', lwd = 1.5, na.rm = TRUE)
-          abline(h = median(HLA_A_type2tumorCov), lty = 'dashed',
-            col = '#3182bd', lwd = 1.5, na.rm = TRUE)
-          }, error = function(e) return(NULL))
-
-          tryCatch({
-          par(mfrow = c(1, 1))
-          par(mar = c(5, 5, 5, 2))
-          plot(c(1:max(c(HLA_A_type1tumor$V2, HLA_A_type2tumor$V2)))
-               , lim = c(0, Ymax), col = '#3182bd99', pch = 16
-               , lab = 'HLA genomic position'
-               , lab = 'Coverage'
-               , ain = c(paste("HLA raw coverage", sample))
-               , ex = 0.75
-               , ype = 'n'
-               , as = 1)
-
-          points(HLA_A_type1tumor$V2, HLA_A_type1tumor$V4, col = '#de2d2699', pch = 16)
-          points(HLA_A_type1tumor$V2[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], HLA_A_type1tumor$V4[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], col = 'black', bg = '#de2d2699', pch = 21, cex = 1)
-
-          points(HLA_A_type2tumor$V2, HLA_A_type2tumor$V4, col = '#3182bd99', pch = 16)
-          points(HLA_A_type2tumor$V2[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], HLA_A_type2tumor$V4[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], col = 'black', bg = '#3182bd99', pch = 21, cex = 1)
+          abline(h = nA_rawVal_withoutBAFBin, lty = 'dashed',
+            col = '#de2d2699', lwd = 3)
+          abline(h = nB_rawVal_withoutBAFBin, lty = 'dashed',
+            col = '#3182bd99', lwd = 3)
 
           legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-                 lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n', cex = 1, lwd = 3)
+            lty = 1, col = c('#3182bd', '#de2d26'),
+            bty = 'n', cex = 1, lwd = 3)
           }, error = function(e) return(NULL))
-
-
-          tryCatch({
-          plot(c(1:max(c(HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)))
-               , lim = c(0, Ymax), col = '#3182bd99', pch = 16
-               , lab = 'HLA genomic position'
-               , lab = 'Coverage'
-               , ain = c(paste("HLA raw balance", sample))
-               , ex = 0.75
-               , ype = 'n'
-               , as = 1)
-          points(HLA_A_type1tumor$V2[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], HLA_A_type1tumor$V4[HLA_A_type1tumor$V2 %in% missMatchPositions$diffSeq1], col = '#de2d2699', pch = 16, cex = 1)
-          points(HLA_A_type2tumor$V2[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], HLA_A_type2tumor$V4[HLA_A_type2tumor$V2 %in% missMatchPositions$diffSeq2], col = '#3182bd99', pch = 16, cex = 1)
-
-          legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-                 lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n', cex = 1, lwd = 3)
-          }, error = function(e) return(NULL))
-
-        }
-
-        ## next, let's plot the predicted integer copy numbers
-        if (!is.na(tumorPurity) && nrow(combinedTable) != 0) {
-          tryCatch({
-          plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2, HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)), ylim = c(-0.5, max(round(c(combinedTable$nBcombined, combinedTable$nAcombined)), na.rm = TRUE)+1), col = '#3182bd99', pch = 16
-               , lab = 'HLA genomic position'
-               , lab = 'Copy Number'
-               , ain = c(paste("HLA copyNum balance", sample))
-               , ex = 0.75
-               , ype = 'n'
-               , axt = 'n')
-
-          if (length(HLAtype1exons)!= 0) {
-            for (i in 1:nrow(HLAtype1exonTable)) {
-              rect(xleft = as.numeric(HLAtype1exonTable[i, 1]), xright = as.numeric(HLAtype1exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
-            }
-          }
-
-          if (length(HLAtype2exons)!= 0) {
-            for (i in 1:nrow(HLAtype2exonTable)) {
-              rect(xleft = as.numeric(HLAtype2exonTable[i, 1]), xright = as.numeric(HLAtype2exonTable[i, 2]), ybottom = -2, ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)), col = '#bdbdbd25', border = FALSE)
-            }
-          }
-
-          if (useLogRbin) {
-            axis(side = 2, at = 0:max(round(c(combinedTable$nAcombinedBin, combinedTable$nBcombinedBin)), na.rm = TRUE), las = 1)
-            points(combinedTable$missMatchseq1, combinedTable$nAcombinedBin, col = '#de2d2699', pch = 16, cex = 1)
-            points(combinedTable$missMatchseq2, combinedTable$nBcombinedBin, col = '#3182bd99', pch = 16, cex = 1)
-
-            abline(h = nA_rawVal_withBAF_bin, lty = 'dashed', col = '#de2d2699', lwd = 3)
-            abline(h = nB_rawVal_withBAF_bin, lty = 'dashed', col = '#3182bd99', lwd = 3)
-
-            legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-                   lty = 1, col = c('#3182bd', '#de2d26'), bty = 'n', cex = 1, lwd = 3)
-          }
-
-          if (!useLogRbin) {
-            axis(side = 2, at = 0:max(round(c(combinedTable$nAcombined, combinedTable$nBcombined)), na.rm = TRUE), las = 1)
-            points(combinedTable$missMatchseq1, combinedTable$nAcombined, col = '#de2d2699', pch = 16, cex = 1)
-            points(combinedTable$missMatchseq2, combinedTable$nBcombined, col = '#3182bd99', pch = 16, cex = 1)
-
-            abline(h = nA_rawVal_withBAF, lty = 'dashed', col = '#de2d2699', lwd = 3)
-            abline(h = nB_rawVal_withBAF, lty = 'dashed', col = '#3182bd99', lwd = 3)
-
-            legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-                   lty = 1, col = c('#3182bd', '#de2d26'), bty = 'n', cex = 1, lwd = 3)
-          }
-          }, error = function(e) return(NULL))
-
-        }
-
-        if (!is.na(tumorPurity) && nrow(combinedTable) != 0) {
-          if (!useLogRbin) {
-            tryCatch({
-            plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2,
-                  HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)),
-              ylim = c(-0.5, max(round(c(combinedTable$nAsep,
-                      combinedTable$nBsep)), na.rm = TRUE) + 1),
-              col = '#3182bd99', pch = 16, lab = 'HLA genomic position',
-              lab = 'Copy Number',
-              ain = c(paste("HLA copyNum balance", sample)),
-              ex = 0.75, ype = 'n', axt = 'n')
-            axis(side = 2,
-              at = 0:max(round(c(combinedTable$nAsep, combinedTable$nBsep))),
-              las = 1)
-
-            if (length(HLAtype1exons)!= 0) {
-              for (i in 1:nrow(HLAtype1exonTable)) {
-                rect(xleft = as.numeric(HLAtype1exonTable[i, 1]),
-                  xright = as.numeric(HLAtype1exonTable[i, 2]),
-                  ybottom = -2,
-                  ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
-                  col = '#bdbdbd25', border = FALSE)
-              }
-            }
-
-            if (length(HLAtype2exons)!= 0) {
-              for (i in 1:nrow(HLAtype2exonTable)) {
-                rect(xleft = as.numeric(HLAtype2exonTable[i, 1]),
-                  xright = as.numeric(HLAtype2exonTable[i, 2]),
-                  ybottom = -2,
-                  ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
-                  col = '#bdbdbd25', border = FALSE)
-              }
-            }
-
-            points(combinedTable$missMatchseq1, combinedTable$nAsep,
-              col = '#de2d2699', pch = 16, cex = 1)
-            points(combinedTable$missMatchseq2, combinedTable$nBsep,
-              col = '#3182bd99', pch = 16, cex = 1)
-
-            abline(h = nA_rawVal_withoutBAF, lty = 'dashed',
-              col = '#de2d2699', lwd = 3)
-            abline(h = nB_rawVal_withoutBAF, lty = 'dashed',
-              col = '#3182bd99', lwd = 3)
-
-            legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-              lty = 1, col = c('#3182bd', '#de2d26'),
-              bty = 'n', cex = 1, lwd = 3)
-            }, error = function(e) return(NULL))
-          }
-
-          if (useLogRbin) {
-            tryCatch({
-            plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2,
-                  HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)),
-              ylim = c(-0.5, max(round(c(combinedTable$nAsep, combinedTable$nBsep)),
-                  na.rm = TRUE) + 1), col = '#3182bd99', pch = 16,
-              lab = 'HLA genomic position', lab = 'Copy Number',
-              ain = c(paste("HLA copyNum balance", sample)),
-              ex = 0.75, ype = 'n', axt = 'n')
-            axis(side = 2,
-              at = 0:max(round(c(combinedTable$nAsep, combinedTable$nBsep))),
-              las = 1)
-
-            if (length(HLAtype1exons) != 0) {
-              for (i in 1:nrow(HLAtype1exonTable)) {
-                rect(xleft = as.numeric(HLAtype1exonTable[i, 1]),
-                  xright = as.numeric(HLAtype1exonTable[i, 2]),
-                  ybottom = -2,
-                  ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
-                  col = '#bdbdbd25', border = FALSE)
-              }
-            }
-
-            if (length(HLAtype2exons) != 0) {
-              for (i in 1:nrow(HLAtype2exonTable)) {
-                rect(xleft = as.numeric(HLAtype2exonTable[i, 1]),
-                  xright = as.numeric(HLAtype2exonTable[i, 2]),
-                  ybottom = -2,
-                  ytop = max(c(HLA_A_type1normalCov, HLA_A_type2normalCov)),
-                  col = '#bdbdbd25', border = FALSE)
-              }
-            }
-
-            points(combinedTable$missMatchseq1,
-              combinedTable$nAsepBin, col = '#de2d2699', pch = 16, cex = 1)
-            points(combinedTable$missMatchseq2,
-              combinedTable$nBsepBin, col = '#3182bd99', pch = 16, cex = 1)
-
-            abline(h = nA_rawVal_withoutBAFBin, lty = 'dashed',
-              col = '#de2d2699', lwd = 3)
-            abline(h = nB_rawVal_withoutBAFBin, lty = 'dashed',
-              col = '#3182bd99', lwd = 3)
-
-            legend('topleft', legend = c(HLA_A_type2, HLA_A_type1) ,
-              lty = 1, col = c('#3182bd', '#de2d26'),
-              bty = 'n', cex = 1, lwd = 3)
-            }, error = function(e) return(NULL))
-          }
-        }
-
-        # t-test plot
-        par(mfrow = c(1, 2))
-        par(mar = c(5, 5, 5, 2))
-
-        if (nrow(tmpOut) > 0) {
-          if (runWithNormal) {
-            tryCatch({
-            boxplot(tmpOut[, 2], tmpOut[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-2, 2), names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest$p.value, 3)), ylab = ('logR ratio'))
-            }, error = function(e) return(NULL))
-          }
-          if (!runWithNormal) {
-            tryCatch({
-            boxplot(tmpOut[, 2], tmpOut[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest$p.value, 3)), ylab = ('Coverage'))
-            }, error = function(e) return(NULL))
-          }
-
-          tryCatch({
-          beeswarm(tmpOut[, 2], col = c('#de2d2699'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 1, cex = 1.75)
-          }, error = function(e) return(NULL))
-          tryCatch({
-          beeswarm(tmpOut[, 4], col = c('#3182bd99'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 2, cex = 1.75)
-          }, error = function(e) return(NULL))
-          tryCatch({
-          barplot(sort(c(tmpOut[, 2]-tmpOut[, 4])), horiz = TRUE, yaxt = 'n', col = ifelse(sort(c(tmpOut[, 2]-tmpOut[, 4]))>0, '#de2d26', '#3182bd'), border = FALSE, main = 'Paired Differences in logR')
-          }, error = function(e) return(NULL))
-        }
-
-        # t-test of mismatch sites without counting the same read twice
-        if (nrow(tmpOut_unique) > 0) {
-          if (runWithNormal) {
-            tryCatch({
-            boxplot(tmpOut_unique[, 2], tmpOut_unique[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-10, 10), names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest_unique$p.value, 3)), ylab = ('"logR ratio"'))
-            }, error = function(e) return(NULL))
-          }
-          if (!runWithNormal) {
-            tryCatch({
-            boxplot(tmpOut_unique[, 2], tmpOut_unique[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest_unique$p.value, 3)), ylab = ('"Coverage"'))
-            }, error = function(e) return(NULL))
-          }
-          tryCatch({
-          beeswarm(tmpOut_unique[, 2], col = c('#de2d2699'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 1, cex = 1.75)
-          }, error = function(e) return(NULL))
-          tryCatch({
-          beeswarm(tmpOut_unique[, 4], col = c('#3182bd99'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 2, cex = 1.75)
-          }, error = function(e) return(NULL))
-          tryCatch({
-          barplot(sort(c(tmpOut_unique[, 2]-tmpOut_unique[, 4])), horiz = TRUE, yaxt = 'n', col = ifelse(sort(c(tmpOut_unique[, 2]-tmpOut_unique[, 4]))>0, '#de2d26', '#3182bd'), border = FALSE, main = 'Paired Differences in logR')
-          }, error = function(e) return(NULL))
-        }
-
-        # compare tumor / normal coverage site-wise
-        # probably not a necessary plot
-        if (!any(c(length(HLA_A_type1tumorCov_mismatch_unique),
-            length(HLA_A_type2tumorCov_mismatch_unique)) == 0)) {
-          tryCatch({
-          par(mfrow = c(2, 2))
-          tmpOut2 <- cbind(missMatchseq1, MultFactor*HLA_A_type1tumorCov[as.character(missMatchseq1)], HLA_A_type1normalCov[as.character(missMatchseq1)], missMatchseq2, MultFactor*HLA_A_type2tumorCov[as.character(missMatchseq2)], HLA_A_type2normalCov[as.character(missMatchseq2)])
-          tmpOut_unique2 <- cbind(missMatchseq1, MultFactor*HLA_A_type1tumorCov_mismatch_unique[as.character(missMatchseq1)], HLA_A_type1normalCov_mismatch_unique[as.character(missMatchseq1)], missMatchseq2, MultFactor*HLA_A_type2tumorCov_mismatch_unique[as.character(missMatchseq2)], HLA_A_type2normalCov_mismatch_unique[as.character(missMatchseq2)])
-          dup1_unique <- unique(tmpOut_unique2[duplicated(tmpOut_unique2[, 1]), 1])
-          dup2_unique <- unique(tmpOut_unique2[duplicated(tmpOut_unique2[, 4]), 4])
-
-          for (duplicationIn1 in dup1_unique) {
-            tmpOut2[tmpOut2[, 1] == duplicationIn1, 5] <-
-              median(tmpOut2[tmpOut2[, 1] == duplicationIn1, 5])
-            tmpOut2[tmpOut2[, 1] == duplicationIn1, 6] <-
-              median(tmpOut2[tmpOut2[, 1] == duplicationIn1, 6])
-
-            tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 5] <-
-              median(tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 5])
-            tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 6] <-
-              median(tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 6])
-          }
-
-          for (duplicationIn2 in dup2_unique) {
-            tmpOut2[tmpOut2[, 4] == duplicationIn1, 2] <-
-              median(tmpOut2[tmpOut2[, 4] == duplicationIn1, 2])
-            tmpOut2[tmpOut2[, 4] == duplicationIn1, 3] <-
-              median(tmpOut2[tmpOut2[, 4] == duplicationIn1, 3])
-
-            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2] <-
-              median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2])
-            tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3] <-
-              median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3])
-          }
-
-          tmpOut2 <- tmpOut2[!duplicated(tmpOut2[, 1]), , drop = FALSE]
-          tmpOut2 <- tmpOut2[!duplicated(tmpOut2[, 4]), , drop = FALSE]
-          tmpOut_unique2 <- tmpOut_unique2[!duplicated(tmpOut_unique2[, 1]), ,
-            drop = FALSE]
-          tmpOut_unique2 <- tmpOut_unique2[!duplicated(tmpOut_unique2[, 4]), ,
-            drop = FALSE]
-          }, error = function(e) return(NULL))
-
-          if (nrow(tmpOut2) > 0) {
-            tryCatch({
-            plot(tmpOut2[, 3], tmpOut2[, 2], xlab = 'normal coverage', ylab = 'tumor coverage', pch = 16, col = '#de2d2699', main = HLA_A_type1)
-            abline(a = 0, b = 1)
-            }, error = function(e) return(NULL))
-            tryCatch({
-            plot(tmpOut2[, 6], tmpOut2[, 5], xlab = 'normal coverage',
-              ylab = 'tumor coverage', pch = 16, col = '#3182bd99',
-              main = HLA_A_type2)
-            abline(a = 0, b = 1)
-            }, error = function(e) return(NULL))
-          }
-          if (nrow(tmpOut_unique2) > 0) {
-            tryCatch({
-            plot(tmpOut_unique2[, 3], tmpOut_unique2[, 2], xlab = 'normal unique coverage', ylab = 'tumor unique coverage', pch = 16, col = '#de2d2699', main = HLA_A_type1)
-            abline(a = 0, b = 1)
-            }, error = function(e) return(NULL))
-            tryCatch({
-            plot(tmpOut_unique2[, 6], tmpOut_unique2[, 5], xlab = 'normal unique coverage', ylab = 'tumor unique coverage', pch = 16, col = '#3182bd99', main = HLA_A_type2)
-            abline(a = 0, b = 1)
-            }, error = function(e) return(NULL))
-          }
-        }
-
-        if (runWithNormal) {
-          ## rolling mean log tumor/normal
-          tryCatch({
-          par(mfrow = c(1, 1))
-          par(mar = c(5, 5, 5, 2))
-          plot(c(log2(
-            rollmean(HLA_A_type2tumorCov, min(500, length(HLA_A_type2tumorCov)))/
-            rollmean(HLA_A_type2normalCov, min(500, length(HLA_A_type2normalCov)))*MultFactor)),
-            ylim = c(-2, 2),
-            col = '#3182bd', pch = 16, lab = 'HLA genomic position',
-            lab = 'Log Ratio',
-            ain = c(paste("HLA rolling mean balance", sample)), ex = 0.75)
-          points(c(log2(rollmean(HLA_A_type1tumorCov, min(500, length(HLA_A_type1tumorCov)))/rollmean(HLA_A_type1normalCov, min(500, length(HLA_A_type1normalCov)))*MultFactor)), col = '#de2d26', pch = 16, cex = 0.75)
-          legend('bottomright', legend = c(HLA_A_type2, HLA_A_type1) ,
-                 lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n', cex = 1, lwd = 3)
-          }, error = function(e) return(NULL))
-
-          if (extractNONmismatchReads == TRUE) {
-            tryCatch({
-            plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2, HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)), ylim = c(-2, 2), col = '#3182bd99', pch = 16, lab = 'HLA genomic position', lab = 'Log Ratio',
-              ain = c(paste("HLA raw balance", sample)), ex = 0.75, ype = 'n')
-            points(c(HLA_A_type2normal$V2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = 'black', bg = '#3182bd', pch = 21, cex = 1)
-            points(c(HLA_A_type1normal$V2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = 'black', bg = '#de2d26', pch = 21, cex = 1)
-            abline(h = 0, lty = 'dashed')
-
-            points(c(HLA_type2normal_nomissmatch$V2), log2(c(HLA_type2tumor_nomissmatchCov/HLA_type2normal_nomissmatchCov)*MultFactor), col = '#3182bd99', pch = 16, cex = 1)
-            points(c(HLA_type1normal_nomissmatch$V2), log2(c(HLA_type1tumor_nomissmatchCov/HLA_type1normal_nomissmatchCov)*MultFactor), col = '#de2d2699', pch = 16, cex = 1)
-            }, error = function(e) return(NULL))
-
-
-
-            # comparing mismatch sites to non-mismatch sites
-            tryCatch({
-            par(mfrow = c(1, 2))
-            par(mar = c(5, 5, 5, 2))
-
-            if (length(HLA_type2tumor_nomissmatchCov) > 1 & length(HLA_A_type2normalCov[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2]) > 1) {
-              Ttest <- t.test.NA(log(c((HLA_type2tumor_nomissmatchCov+0.01)/HLA_type2normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type2tumorCov+0.01)/HLA_A_type2normalCov)*MultFactor, 2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2])
-              boxplot(log(c((HLA_type2tumor_nomissmatchCov+0.01)/HLA_type2normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type2tumorCov+0.01)/HLA_A_type2normalCov)*MultFactor, 2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-2, 2), names = c('No mismatch reads', 'Mismatch reads'), las = 1, main = paste(HLA_A_type2, '\n t.test p.val = ', signif (Ttest$p.value, 3)), ylab = ('logR ratio'), xlab = 'coverage from')
-            }
-
-            if (length(HLA_type1tumor_nomissmatchCov) > 1 & length(HLA_A_type1normalCov[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1]) > 1) {
-              Ttest <- t.test.NA(log(c((HLA_type1tumor_nomissmatchCov+0.01)/HLA_type1normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type1tumorCov+0.01)/HLA_A_type1normalCov)*MultFactor, 2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1])
-              boxplot(log(c((HLA_type1tumor_nomissmatchCov+0.01)/HLA_type1normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type1tumorCov+0.01)/HLA_A_type1normalCov)*MultFactor, 2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-2, 2), names = c('No mismatch reads', 'Mismatch reads'), las = 1, main = paste(HLA_A_type1, '\n t.test p.val = ', signif(Ttest$p.value, 3)), ylab = ('logR ratio'), xlab = 'coverage from')
-            }
-            }, error = function(e) return(NULL))
-          }
         }
       }
-      dev.off()
+
+      # t-test plot
+      par(mfrow = c(1, 2))
+      par(mar = c(5, 5, 5, 2))
+
+      if (nrow(tmpOut) > 0) {
+        if (runWithNormal) {
+          tryCatch({
+          boxplot(tmpOut[, 2], tmpOut[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-2, 2), names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest$p.value, 3)), ylab = ('logR ratio'))
+          }, error = function(e) return(NULL))
+        }
+        if (!runWithNormal) {
+          tryCatch({
+          boxplot(tmpOut[, 2], tmpOut[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest$p.value, 3)), ylab = ('Coverage'))
+          }, error = function(e) return(NULL))
+        }
+
+        tryCatch({
+        beeswarm(tmpOut[, 2], col = c('#de2d2699'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 1, cex = 1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
+        beeswarm(tmpOut[, 4], col = c('#3182bd99'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 2, cex = 1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
+        barplot(sort(c(tmpOut[, 2]-tmpOut[, 4])), horiz = TRUE, yaxt = 'n', col = ifelse(sort(c(tmpOut[, 2]-tmpOut[, 4]))>0, '#de2d26', '#3182bd'), border = FALSE, main = 'Paired Differences in logR')
+        }, error = function(e) return(NULL))
+      }
+
+      # t-test of mismatch sites without counting the same read twice
+      if (nrow(tmpOut_unique) > 0) {
+        if (runWithNormal) {
+          tryCatch({
+          boxplot(tmpOut_unique[, 2], tmpOut_unique[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-10, 10), names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest_unique$p.value, 3)), ylab = ('"logR ratio"'))
+          }, error = function(e) return(NULL))
+        }
+        if (!runWithNormal) {
+          tryCatch({
+          boxplot(tmpOut_unique[, 2], tmpOut_unique[, 4], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, names = c(HLA_A_type1, HLA_A_type2), las = 1, main = paste('Paired t.test p.val = ', signif (PairedTtest_unique$p.value, 3)), ylab = ('"Coverage"'))
+          }, error = function(e) return(NULL))
+        }
+        tryCatch({
+        beeswarm(tmpOut_unique[, 2], col = c('#de2d2699'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 1, cex = 1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
+        beeswarm(tmpOut_unique[, 4], col = c('#3182bd99'), add = TRUE, corral = 'wrap', method = 'swarm', corralWidth = 0.25, pch = 16, at = 2, cex = 1.75)
+        }, error = function(e) return(NULL))
+        tryCatch({
+        barplot(sort(c(tmpOut_unique[, 2]-tmpOut_unique[, 4])), horiz = TRUE, yaxt = 'n', col = ifelse(sort(c(tmpOut_unique[, 2]-tmpOut_unique[, 4]))>0, '#de2d26', '#3182bd'), border = FALSE, main = 'Paired Differences in logR')
+        }, error = function(e) return(NULL))
+      }
+
+      # compare tumor / normal coverage site-wise
+      # probably not a necessary plot
+      if (!any(c(length(HLA_A_type1tumorCov_mismatch_unique),
+          length(HLA_A_type2tumorCov_mismatch_unique)) == 0)) {
+        tryCatch({
+        par(mfrow = c(2, 2))
+        tmpOut2 <- cbind(missMatchseq1, MultFactor*HLA_A_type1tumorCov[as.character(missMatchseq1)], HLA_A_type1normalCov[as.character(missMatchseq1)], missMatchseq2, MultFactor*HLA_A_type2tumorCov[as.character(missMatchseq2)], HLA_A_type2normalCov[as.character(missMatchseq2)])
+        tmpOut_unique2 <- cbind(missMatchseq1, MultFactor*HLA_A_type1tumorCov_mismatch_unique[as.character(missMatchseq1)], HLA_A_type1normalCov_mismatch_unique[as.character(missMatchseq1)], missMatchseq2, MultFactor*HLA_A_type2tumorCov_mismatch_unique[as.character(missMatchseq2)], HLA_A_type2normalCov_mismatch_unique[as.character(missMatchseq2)])
+        dup1_unique <- unique(tmpOut_unique2[duplicated(tmpOut_unique2[, 1]), 1])
+        dup2_unique <- unique(tmpOut_unique2[duplicated(tmpOut_unique2[, 4]), 4])
+
+        for (duplicationIn1 in dup1_unique) {
+          tmpOut2[tmpOut2[, 1] == duplicationIn1, 5] <-
+            median(tmpOut2[tmpOut2[, 1] == duplicationIn1, 5])
+          tmpOut2[tmpOut2[, 1] == duplicationIn1, 6] <-
+            median(tmpOut2[tmpOut2[, 1] == duplicationIn1, 6])
+
+          tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 5] <-
+            median(tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 5])
+          tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 6] <-
+            median(tmpOut_unique2[tmpOut_unique2[, 1] == duplicationIn1, 6])
+        }
+
+        for (duplicationIn2 in dup2_unique) {
+          tmpOut2[tmpOut2[, 4] == duplicationIn1, 2] <-
+            median(tmpOut2[tmpOut2[, 4] == duplicationIn1, 2])
+          tmpOut2[tmpOut2[, 4] == duplicationIn1, 3] <-
+            median(tmpOut2[tmpOut2[, 4] == duplicationIn1, 3])
+
+          tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2] <-
+            median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 2])
+          tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3] <-
+            median(tmpOut_unique2[tmpOut_unique2[, 4] == duplicationIn2, 3])
+        }
+
+        tmpOut2 <- tmpOut2[!duplicated(tmpOut2[, 1]), , drop = FALSE]
+        tmpOut2 <- tmpOut2[!duplicated(tmpOut2[, 4]), , drop = FALSE]
+        tmpOut_unique2 <- tmpOut_unique2[!duplicated(tmpOut_unique2[, 1]), ,
+          drop = FALSE]
+        tmpOut_unique2 <- tmpOut_unique2[!duplicated(tmpOut_unique2[, 4]), ,
+          drop = FALSE]
+        }, error = function(e) return(NULL))
+
+        if (nrow(tmpOut2) > 0) {
+          tryCatch({
+          plot(tmpOut2[, 3], tmpOut2[, 2], xlab = 'normal coverage', ylab = 'tumor coverage', pch = 16, col = '#de2d2699', main = HLA_A_type1)
+          abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
+          tryCatch({
+          plot(tmpOut2[, 6], tmpOut2[, 5], xlab = 'normal coverage',
+            ylab = 'tumor coverage', pch = 16, col = '#3182bd99',
+            main = HLA_A_type2)
+          abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
+        }
+        if (nrow(tmpOut_unique2) > 0) {
+          tryCatch({
+          plot(tmpOut_unique2[, 3], tmpOut_unique2[, 2], xlab = 'normal unique coverage', ylab = 'tumor unique coverage', pch = 16, col = '#de2d2699', main = HLA_A_type1)
+          abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
+          tryCatch({
+          plot(tmpOut_unique2[, 6], tmpOut_unique2[, 5], xlab = 'normal unique coverage', ylab = 'tumor unique coverage', pch = 16, col = '#3182bd99', main = HLA_A_type2)
+          abline(a = 0, b = 1)
+          }, error = function(e) return(NULL))
+        }
+      }
+
+      if (runWithNormal) {
+        ## rolling mean log tumor/normal
+        tryCatch({
+        par(mfrow = c(1, 1))
+        par(mar = c(5, 5, 5, 2))
+        plot(c(log2(
+          rollmean(HLA_A_type2tumorCov, min(500, length(HLA_A_type2tumorCov)))/
+          rollmean(HLA_A_type2normalCov, min(500, length(HLA_A_type2normalCov)))*MultFactor)),
+          ylim = c(-2, 2),
+          col = '#3182bd', pch = 16, lab = 'HLA genomic position',
+          lab = 'Log Ratio',
+          ain = c(paste("HLA rolling mean balance", sample)), ex = 0.75)
+        points(c(log2(rollmean(HLA_A_type1tumorCov, min(500, length(HLA_A_type1tumorCov)))/rollmean(HLA_A_type1normalCov, min(500, length(HLA_A_type1normalCov)))*MultFactor)), col = '#de2d26', pch = 16, cex = 0.75)
+        legend('bottomright', legend = c(HLA_A_type2, HLA_A_type1) ,
+               lty = 1, col = c('#3182bd99', '#de2d2699'), bty = 'n', cex = 1, lwd = 3)
+        }, error = function(e) return(NULL))
+
+        if (extractNONmismatchReads == TRUE) {
+          tryCatch({
+          plot(c(1:max(HLA_A_type1normal$V2, HLA_A_type2normal$V2, HLA_A_type2tumor$V2, HLA_A_type1tumor$V2)), ylim = c(-2, 2), col = '#3182bd99', pch = 16, lab = 'HLA genomic position', lab = 'Log Ratio',
+            ain = c(paste("HLA raw balance", sample)), ex = 0.75, ype = 'n')
+          points(c(HLA_A_type2normal$V2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], log2(c(HLA_A_type2tumorCov/HLA_A_type2normalCov)*MultFactor)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = 'black', bg = '#3182bd', pch = 21, cex = 1)
+          points(c(HLA_A_type1normal$V2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], log2(c(HLA_A_type1tumorCov/HLA_A_type1normalCov)*MultFactor)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = 'black', bg = '#de2d26', pch = 21, cex = 1)
+          abline(h = 0, lty = 'dashed')
+
+          points(c(HLA_type2normal_nomissmatch$V2), log2(c(HLA_type2tumor_nomissmatchCov/HLA_type2normal_nomissmatchCov)*MultFactor), col = '#3182bd99', pch = 16, cex = 1)
+          points(c(HLA_type1normal_nomissmatch$V2), log2(c(HLA_type1tumor_nomissmatchCov/HLA_type1normal_nomissmatchCov)*MultFactor), col = '#de2d2699', pch = 16, cex = 1)
+          }, error = function(e) return(NULL))
+
+
+
+          # comparing mismatch sites to non-mismatch sites
+          tryCatch({
+          par(mfrow = c(1, 2))
+          par(mar = c(5, 5, 5, 2))
+
+          if (length(HLA_type2tumor_nomissmatchCov) > 1 & length(HLA_A_type2normalCov[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2]) > 1) {
+            Ttest <- t.test.NA(log(c((HLA_type2tumor_nomissmatchCov+0.01)/HLA_type2normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type2tumorCov+0.01)/HLA_A_type2normalCov)*MultFactor, 2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2])
+            boxplot(log(c((HLA_type2tumor_nomissmatchCov+0.01)/HLA_type2normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type2tumorCov+0.01)/HLA_A_type2normalCov)*MultFactor, 2)[names(HLA_A_type2normalCov) %in% missMatchPositions$diffSeq2], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-2, 2), names = c('No mismatch reads', 'Mismatch reads'), las = 1, main = paste(HLA_A_type2, '\n t.test p.val = ', signif (Ttest$p.value, 3)), ylab = ('logR ratio'), xlab = 'coverage from')
+          }
+
+          if (length(HLA_type1tumor_nomissmatchCov) > 1 & length(HLA_A_type1normalCov[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1]) > 1) {
+            Ttest <- t.test.NA(log(c((HLA_type1tumor_nomissmatchCov+0.01)/HLA_type1normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type1tumorCov+0.01)/HLA_A_type1normalCov)*MultFactor, 2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1])
+            boxplot(log(c((HLA_type1tumor_nomissmatchCov+0.01)/HLA_type1normal_nomissmatchCov)*MultFactor, 2), log(c((HLA_A_type1tumorCov+0.01)/HLA_A_type1normalCov)*MultFactor, 2)[names(HLA_A_type1normalCov) %in% missMatchPositions$diffSeq1], col = c('#de2d2699', '#3182bd99'), boxwex = 0.2, ylim = c(-2, 2), names = c('No mismatch reads', 'Mismatch reads'), las = 1, main = paste(HLA_A_type1, '\n t.test p.val = ', signif(Ttest$p.value, 3)), ylab = ('logR ratio'), xlab = 'coverage from')
+          }
+          }, error = function(e) return(NULL))
+        }
+      }
     }
+    dev.off()
   }
   ### }}} Plotting step
-  ## }}}
 
   ## {{{ Write the output
   fdate <- format(Sys.time(), '%Y%m%d')
