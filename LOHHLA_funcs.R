@@ -1318,8 +1318,10 @@ run_LOHHLA <- function(opt) {
             HLA_A_type1tumor[HLA_A_type1tumor$V2 %in%
             missMatchPositions$diffSeq1, , drop = FALSE]
           missMatchBed1 <- mismatchPosSeq1[, c(1, 2, 2)]
+          ## 2019-05-01 11:00 M.S. Changed the bed file from three to two
+          ## columns
           missMatchBed1$V2 <- as.numeric(missMatchBed1$V2) - 1
-          missMatchBed1$V3 <- as.numeric(missMatchBed1$V2.1) + 1
+          missMatchBed1$V2.1 <- as.numeric(missMatchBed1$V2.1) + 1
           type1_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed',
             sep = '')
           write.table(missMatchBed1,
@@ -1330,10 +1332,10 @@ run_LOHHLA <- function(opt) {
           mismatchPosSeq2 <-
             HLA_A_type2tumor[HLA_A_type2tumor$V2 %in%
             missMatchPositions$diffSeq2, , drop = FALSE]
-          missMatchBed2 <- mismatchPosSeq2[, c(2, 2, 2)]
+          missMatchBed2 <- mismatchPosSeq2[, c(1, 2, 2)]
           missMatchBed2$V2 <- as.numeric(missMatchBed2$V2) - 1
-          missMatchBed2$V3 <- as.numeric(missMatchBed2$V2.2) + 1
-          type2_bed <- paste(workDir, '/', sample, '.', HLA_A_type1, '.bed',
+          missMatchBed2$V2.1 <- as.numeric(missMatchBed2$V2.1) + 1
+          type2_bed <- paste(workDir, '/', sample, '.', HLA_A_type2, '.bed',
             sep = '')
           write.table(missMatchBed2,
             file = type2_bed,
@@ -1468,7 +1470,7 @@ run_LOHHLA <- function(opt) {
             ## {{{ Type 1
             HLA_type1normal_nomissmatch <-
               data.frame(cbind(HLA_A_type1, 1:length(HLA_type1Fasta),
-                  toupper(HLA_type1Fasta), minCoverageFilter+1),
+                  toupper(HLA_type1Fasta), minCoverageFilter + 1),
                 stringsAsFactors = FALSE)
             HLA_type1normal_nomissmatch$V4 <-
               as.numeric(HLA_type1normal_nomissmatch$V4)
@@ -1476,7 +1478,7 @@ run_LOHHLA <- function(opt) {
             ## {{{ Type 2
             HLA_type2normal_nomissmatch <-
               data.frame(cbind(HLA_A_type2, 2:length(HLA_type2Fasta),
-                  toupper(HLA_type2Fasta), minCoverageFilter+2),
+                  toupper(HLA_type2Fasta), minCoverageFilter + 2),
                 stringsAsFactors = FALSE)
             HLA_type2normal_nomissmatch$V4 <-
               as.numeric(HLA_type2normal_nomissmatch$V4)
@@ -1845,7 +1847,15 @@ run_LOHHLA <- function(opt) {
 
         combinedTable <- data.frame(tmpOut_cn, stringsAsFactors = FALSE) %>%
           lapply(as.numeric) %>%
-          as.data.frame
+          lapply(repl_NA, 0) %>%
+          as.data.frame 
+        combinedTable$logRcombined <- log2(
+          (combinedTable$TumorCov_type1 + combinedTable$TumorCov_type2) /
+          (combinedTable$NormalCov_type1 + combinedTable$NormalCov_type2) * 
+          MultFactor)
+        combinedTable$BAFcombined <- 
+          combinedTable$TumorCov_type1 / 
+          (combinedTable$TumorCov_type1 + combinedTable$TumorCov_type2)
 
         if (nrow(combinedTable) != 0) {
           combinedTable$binlogRCombined <- NA
@@ -1863,6 +1873,10 @@ run_LOHHLA <- function(opt) {
               } %>%
               setNames(NULL) %>%
               which
+
+            if (length(binned_idx) == 0 || is.na(binned_idx)) 
+              next
+
             combinedTable[i, ]$binNum <- binLogR[binned_idx, 1]
             combinedTable[i, ]$binlogRCombined <- binLogR[binned_idx, 3]
             combinedTable[i, ]$binlogRtype1 <- binLogR[binned_idx, 4]
@@ -1877,8 +1891,13 @@ run_LOHHLA <- function(opt) {
 
         rawVals <- funCalcN_withBAF(combinedTable$logRcombined,
           combinedTable$BAFcombined, tumorPloidy, tumorPurity, gamma)
-        combinedTable$nAcombined <- rawVals[, 1]
-        combinedTable$nBcombined <- rawVals[, 2]
+        if (nrow(rawVals) > 0) {
+          combinedTable$nAcombined <- rawVals[, 1]
+          combinedTable$nBcombined <- rawVals[, 2]
+        } else {
+          combinedTable$nAcombined <- NA
+          combinedTable$nBcombined <- NA
+        }
 
         nB_rawVal_withBAF <- median(combinedTable$nBcombined,
           na.rm = TRUE)
