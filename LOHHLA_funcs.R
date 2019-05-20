@@ -1,6 +1,4 @@
 ## {{{ Install required libraries if required
-options(warn=2)
-
 for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
     'naturalsort', 'glue', 'magrittr', 'tools', 'purrr')) {
   if (!require(p, character.only = T)) {
@@ -821,7 +819,6 @@ run_LOHHLA <- function(opt) {
       hlaBAMfile <- paste0(sample_dir, '/', BAMid, '.chr6region.patient',
         '.reference.hlas.csorted.noduplicates.filtered.bam')
 
-
       if (length(alt_loci_names) > 0) {
         ## Add reads mapped to alternate loci to fished file
         for (chrom_name in alt_loci_names) {
@@ -1045,8 +1042,8 @@ run_LOHHLA <- function(opt) {
   ### }}}
 
   ## {{{ Extract number of unique reads sequenced in tumor and normal
-  if (coverageStep && any(unique(runWithNormal)) &&
-    (is.null(opt$normalAlignedReads) || is.null(opt$tumorAlignedReads))) {
+  if (any(unique(runWithNormal)) && 
+      (is.null(opt$normalAlignedReads) || is.null(opt$tumorAlignedReads))) {
     if (!override) {
       sample_uniq_mapped_reads <-
         getUniqMapReads(workDir = workDir, BAMDir = BAMDir,
