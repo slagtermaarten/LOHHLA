@@ -1007,6 +1007,8 @@ run_LOHHLA <- function(opt) {
           paste(tools::md5sum(file.path(sample_dir, filteredBAMfiles)),
             collapse = ', '))
       }
+      # file.size(filteredBAMfiles)
+      # file.exists(filteredBAMfiles)
 
       ## Get pileup files for each bam
       for (BAMfile in filteredBAMfiles) {
@@ -1167,7 +1169,9 @@ run_LOHHLA <- function(opt) {
             full.names = TRUE), value = TRUE)
 
         if (length(HLA_A_type1normalLoc) == 0 ||
-            length(HLA_A_type2normalLoc) == 0) {
+            length(HLA_A_type2normalLoc) == 0 ||
+            file.size(HLA_A_type1normalLoc) == 0 ||
+            file.size(HLA_A_type2normalLoc) == 0) {
           msg <- sprintf('No coverage in normal sample, aborting %s', HLA_gene)
           howToWarn(msg)
           logger(msg)
@@ -1786,18 +1790,26 @@ run_LOHHLA <- function(opt) {
         ## 2019-04-10 11:10 M.S. was getting warnings in element-wise division
         ## of arrays that were of incompatible sizes. This addition should
         ## prevent that.
-        type1_logR <-
-          element_divide_vector(HLA_A_type1tumorCov[missMatchseq1_intersect],
-          HLA_A_type1normalCov[missMatchseq1_intersect],
-          mult_factor = MultFactor) %>%
-          .[, 2]
+        if (length(missMatchseq1_intersect) > 0) {
+          type1_logR <-
+            element_divide_vector(HLA_A_type1tumorCov[missMatchseq1_intersect],
+            HLA_A_type1normalCov[missMatchseq1_intersect],
+            mult_factor = MultFactor) %>%
+            .[, 2]
+        } else {
+          type1_logR <- NA
+        }
 
-        type2_logR <- element_divide_vector(
-          HLA_A_type2tumorCov[missMatchseq2_intersect],
-          HLA_A_type2normalCov[missMatchseq2_intersect],
-          mult_factor = MultFactor) %>%
-          set_colnames(c('idx', 'logR_2')) %>%
-          .[, 2]
+        if (length(missMatchseq2_intersect) > 0) {
+          type2_logR <- element_divide_vector(
+            HLA_A_type2tumorCov[missMatchseq2_intersect],
+            HLA_A_type2normalCov[missMatchseq2_intersect],
+            mult_factor = MultFactor) %>%
+            set_colnames(c('idx', 'logR_2')) %>%
+            .[, 2]
+        } else {
+          type2_logR <- NA
+        }
 
         tmpOut_cn <- cbind_uneven(
           as.numeric(missMatchseq1_intersect),
