@@ -2238,18 +2238,26 @@ run_LOHHLA <- function(opt) {
     })
 
     HLAoutPut <- tryCatch(
-      lapply(HLAoutPut_l, function(x) {
+      plyr::llply(HLAoutPut_l, function(x) {
         x <- x[setdiff(names(x), 'combinedTable')]
         x[sapply(x, is.null)] <- NA;
+        class(x$message) <- 'character'
         x
       }) %>% rbindlist(fill = T)
-    , error = function(e) { print(e); browser() })
+      , error = function(e) { 
+      print('Problem with HLAoutPut'); print(e); browser() 
+    })
 
     combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
-        as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']])))
-      , error = function(e) { print(e); NULL })
+        as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']]))), 
+      error = function(e) { 
+        print('Problem with combinedTable'); print(e); NULL 
+      })
+
     combinedTable <- tryCatch(rbindlist(combinedTable, fill = T),
-      error = function(e) { print(e); NULL })
+      error = function(e) { 
+        print('Problem with combinedTable'); print(e); NULL 
+      })
   }
   ### Coverage step }}}
 
