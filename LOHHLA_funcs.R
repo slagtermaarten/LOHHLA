@@ -224,33 +224,33 @@ get.partially.matching.reads <- function(workDir, sample_dir, BAMDir, BAMfile,
 }
 
 
-combine.fastqs <- function(chr6.f1, chr6.f2, fished.f1, fished.f2) {
-  chr6.f1.seq <- read.table(chr6.f1, sep = '\t', stringsAsFactors = FALSE, comment.char = '', quote = '')
-  chr6.f2.seq <- read.table(chr6.f2, sep = '\t', stringsAsFactors = FALSE, comment.char = '', quote = '')
-  fished.f1.seq <- tryCatch(read.table(fished.f1, sep = '\t',
+#' Add fished reads to chromosome 6 reads
+#'
+#'
+combine.fastqs <- function(chr6, fished) {
+  chr6.seq <- tryCatch(read.table(chr6, sep = '\t',
     stringsAsFactors = FALSE, comment.char = '', quote = ''),
-    error = function(e) { print(e); NULL })
-  fished.f2.seq <- tryCatch(read.table(fished.f2, sep = '\t',
-      stringsAsFactors = FALSE, comment.char = '', quote = ''),
-    error = function(e) { print(e); NULL })
-  fished.f1.names <- fished.f1.seq[seq(1, nrow(fished.f1.seq), by = 4), ]
-  fished.f2.names <- fished.f2.seq[seq(1, nrow(fished.f2.seq), by = 4), ]
-  fished.f1.names.nodup <- fished.f1.names[-which(fished.f1.names %in% chr6.f1.seq$V1)]
-  fished.f2.names.nodup <- fished.f2.names[-which(fished.f2.names %in% chr6.f2.seq$V1)]
-  fished.f1.seq.toadd <- lapply(which(fished.f1.seq$V1 %in% fished.f1.names.nodup), FUN = function(x) {
-    return(fished.f1.seq[x:(x+3), ])
+    error = function(e) {
+      logger(glue('Could not open chr6 {chr6}'))
     })
-  fished.f1.seq.toadd <- unlist(fished.f1.seq.toadd)
-  fished.f2.seq.toadd <- lapply(which(fished.f2.seq$V1 %in% fished.f2.names.nodup), FUN = function(x) {
-    return(fished.f2.seq[x:(x+3), ])
+
+  fished.seq <- tryCatch(read.table(fished, sep = '\t',
+    stringsAsFactors = FALSE, comment.char = '', quote = ''),
+    error = function(e) {
+      logger(glue('Could not open fished {fished}'))
     })
-  fished.f2.seq.toadd <- unlist(fished.f2.seq.toadd)
 
-  new.chr6.f1.seq <- c(chr6.f1.seq$V1, fished.f1.seq.toadd)
-  new.chr6.f2.seq <- c(chr6.f2.seq$V1, fished.f2.seq.toadd)
-
-  write_tsv(new.chr6.f1.seq, chr6.f1, row.names = FALSE, col.names = FALSE)
-  write_tsv(new.chr6.f2.seq, chr6.f2, row.names = FALSE, col.names = FALSE)
+  if (!is.null(fished.seq)) {
+    fished.names <- fished.seq[seq(1, nrow(fished.seq), by = 4), ]
+    fished.names.nodup <- fished.names[-which(fished.names %in% chr6.seq$V1)]
+    fished.seq.toadd <- lapply(which(fished.seq$V1 %in% fished.names.nodup),
+      function(x) return(fished.seq[x:(x+3), ]) )
+    fished.seq.toadd <- unlist(fished.seq.toadd)
+    new.chr6.seq <- c(chr6.seq$V1, fished.seq.toadd)
+    if (!is.null(new.chr6.seq)) {
+      write_tsv(new.chr6.seq, chr6, row.names = FALSE, col.names = FALSE)
+    }
+  }
 }
 
 
@@ -671,7 +671,7 @@ run_LOHHLA <- function(opt) {
     ## Turn mapping of because there's nothing to map anyway
     mappingStep <- F
     coverageStep <- F
-  } 
+  }
   ### }}}
 
   ## {{{ Pre-mapping step: double check whether we actually want to do the
@@ -852,7 +852,12 @@ run_LOHHLA <- function(opt) {
           kmerSize, gatkDir)
         logger('Combine chr6 reads with fished reads from alternate loci')
         ## Overwrite chr6.f1 and chr6.2 to include fished reads
-        combine.fastqs(chr6.f1, chr6.f2, fished.f1, fished.f2)
+        combine.fastqs(chr6.f1, fished.f1)
+        combine.fastqs(chr6.f2, fished.f2)
+      }
+
+      if (is.null(chr6.f1)) {
+        logger(glue('No reads extracted for {BAMfile} f1'))
       }
 
       logger(glue('{BAMfile}: aligning (fished) reads to all HLA alleles'))
@@ -1044,7 +1049,7 @@ run_LOHHLA <- function(opt) {
   ### }}}
 
   ## {{{ Extract number of unique reads sequenced in tumor and normal
-  if (any(unique(runWithNormal)) && 
+  if (any(unique(runWithNormal)) &&
       (is.null(opt$normalAlignedReads) || is.null(opt$tumorAlignedReads))) {
     if (!override) {
       sample_uniq_mapped_reads <-
@@ -1184,9 +1189,9 @@ run_LOHHLA <- function(opt) {
 
         if (any(runWithNormal)) {
           HLA_A_type1normal <- tryCatch(read.table(HLA_A_type1normalLoc,
-            sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE), 
+            sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
           error = function(e) { logger(
-            glue('Could not access {HLA_A_type1normalLoc}')) }) 
+            glue('Could not access {HLA_A_type1normalLoc}')) })
           if (is.null(HLA_A_type1normal)) {
             return(list(message = glue('no_pileup_for_normal_{HLA_gene}_1'),
                 HLA_A_type1 = HLA_A_type1,
@@ -1194,9 +1199,9 @@ run_LOHHLA <- function(opt) {
           }
 
           HLA_A_type2normal <- tryCatch(read.table(HLA_A_type2normalLoc,
-            sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE), 
+            sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
           error = function(e) { logger(
-            glue('Could not access {HLA_A_type2normalLoc}')) }) 
+            glue('Could not access {HLA_A_type2normalLoc}')) })
           if (is.null(HLA_A_type2normal)) {
             return(list(message = glue('no_pileup_for_normal_{HLA_gene}_2'),
                 HLA_A_type1 = HLA_A_type1,
@@ -1227,12 +1232,12 @@ run_LOHHLA <- function(opt) {
         ## rownames attribute is therefore unsafe
         ## Type 1 {{{
         HLA_A_type1normal$mm_position <- as.character(HLA_A_type1normal$V2)
-        tumpile <- paste0(workDir, '/', sample, '.', 
+        tumpile <- paste0(workDir, '/', sample, '.',
           HLA_A_type1, '.', 'tumor.mpileup')
         HLA_A_type1tumor <- tryCatch(
-          read.table(tumpile, sep = '\t', stringsAsFactors = FALSE, 
-            quote = '', fill = TRUE, col.names = paste0('V', c(1:6))), 
-          error = function(e) { print(e); NULL }) 
+          read.table(tumpile, sep = '\t', stringsAsFactors = FALSE,
+            quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
+          error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type1tumor)) {
           return(list(message = glue('no_pileup_for_tumor_{HLA_gene}_1'),
               HLA_A_type1 = HLA_A_type1,
@@ -1271,12 +1276,12 @@ run_LOHHLA <- function(opt) {
 
         ## Type 2 {{{
         HLA_A_type2normal$mm_position <- as.character(HLA_A_type2normal$V2)
-        tumpile <- paste0(workDir, '/', sample, '.', HLA_A_type2, 
+        tumpile <- paste0(workDir, '/', sample, '.', HLA_A_type2,
           '.', 'tumor.mpileup')
         HLA_A_type2tumor <- tryCatch(
-          read.table(tumpile, sep = '\t', stringsAsFactors = FALSE, 
-            quote = '', fill = TRUE, col.names = paste0('V', c(1:6))), 
-          error = function(e) { print(e); NULL }) 
+          read.table(tumpile, sep = '\t', stringsAsFactors = FALSE,
+            quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
+          error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type2tumor)) {
           return(list(message = glue('no_pileup_for_tumor_{HLA_gene}_2'),
               HLA_A_type2 = HLA_A_type2,
@@ -1284,7 +1289,7 @@ run_LOHHLA <- function(opt) {
         }
 
         HLA_A_type2tumor$mm_position <- HLA_A_type2tumor$V2
-        # if (F && HLA_gene == 'hla_b') browser() 
+        # if (F && HLA_gene == 'hla_b') browser()
         ## Apply minimum coverage thresholds (we only apply this to the normal
         ## for now)
         HLA_A_type2normal <-
@@ -1894,13 +1899,13 @@ run_LOHHLA <- function(opt) {
         combinedTable <- data.frame(tmpOut_cn, stringsAsFactors = FALSE) %>%
           lapply(as.numeric) %>%
           lapply(repl_NA, 0) %>%
-          as.data.frame 
+          as.data.frame
         combinedTable$logRcombined <- log2(
           (combinedTable$TumorCov_type1 + combinedTable$TumorCov_type2) /
-          (combinedTable$NormalCov_type1 + combinedTable$NormalCov_type2) * 
+          (combinedTable$NormalCov_type1 + combinedTable$NormalCov_type2) *
           MultFactor)
-        combinedTable$BAFcombined <- 
-          combinedTable$TumorCov_type1 / 
+        combinedTable$BAFcombined <-
+          combinedTable$TumorCov_type1 /
           (combinedTable$TumorCov_type1 + combinedTable$TumorCov_type2)
 
         if (nrow(combinedTable) != 0) {
@@ -1920,7 +1925,7 @@ run_LOHHLA <- function(opt) {
               setNames(NULL) %>%
               which
 
-            if (length(binned_idx) == 0 || is.na(binned_idx)) 
+            if (length(binned_idx) == 0 || is.na(binned_idx))
               next
 
             combinedTable[i, ]$binNum <- binLogR[binned_idx, 1]
@@ -2293,19 +2298,19 @@ run_LOHHLA <- function(opt) {
         class(x$message) <- 'character'
         x
       }) %>% rbindlist(fill = T)
-      , error = function(e) { 
-      print('Problem with HLAoutPut'); print(e); browser() 
+      , error = function(e) {
+      print('Problem with HLAoutPut'); print(e); browser()
     })
 
     combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
-        as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']]))), 
-      error = function(e) { 
-        print('Problem with combinedTable'); print(e); NULL 
+        as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']]))),
+      error = function(e) {
+        print('Problem with combinedTable'); print(e); NULL
       })
 
     combinedTable <- tryCatch(rbindlist(combinedTable, fill = T),
-      error = function(e) { 
-        print('Problem with combinedTable'); print(e); NULL 
+      error = function(e) {
+        print('Problem with combinedTable'); print(e); NULL
       })
   }
   ### Coverage step }}}
