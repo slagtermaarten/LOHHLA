@@ -6,6 +6,10 @@ for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
   }
   require(p, quietly = T, character.only = T)
 }
+
+if (!requireNamespace('strandCheckR', quietly = TRUE)) {
+  BiocManager::install('strandCheckR')
+}
 ## }}}
 
 ## {{{ Helper functions
@@ -254,7 +258,7 @@ combine.fastqs <- function(chr6, fished) {
 }
 
 
-count_events <- function(BAMfile, n) {
+count_events <- function(BAMfile, n, paired_end = T) {
   x <- scanBam(BAMfile, index = BAMfile,
     param = ScanBamParam(what = scanBamWhat(), tag = 'NM'))
   readIDs <- x[[1]][['qname']]
@@ -280,7 +284,11 @@ count_events <- function(BAMfile, n) {
   names(eventCount) <- 1:length(eventCount)
   passed <- eventCount[which(eventCount <= n)]
   y <- readIDs[as.numeric(names(passed))]
-  y <- names(table(y)[which(table(y) == 2)])
+  if (paired_end) {
+    y <- names(table(y)[which(table(y) == 2)])
+  } else {
+    y <- names(table(y)[which(table(y) == 1)])
+  }
   return(y)
 }
 
@@ -538,6 +546,7 @@ run_LOHHLA <- function(opt) {
   plottingStep <- opt$plottingStep
   ignoreWarnings <- opt$ignoreWarnings
   HLAexonLoc <- opt$HLAexonLoc
+  requirePairedReads <- opt$requirePairedReads
   stopifnot(file.exists(HLAexonLoc))
   novoDir <- opt$novoDir
   stopifnot(dir.exists(novoDir))
@@ -724,7 +733,7 @@ run_LOHHLA <- function(opt) {
       logger('fishingStep', 'already done OR fishing turned off, skipping')
     }
 
-    for (BAMfile in BAMfiles) {
+    for (BAMfile in rev(BAMfiles)) {
       BAMid <- unlist(strsplit(BAMfile, split = '.bam'))[1]
       sample_dir <- paste(workDir, '/', BAMid, sep = '')
       if (!dir.exists(sample_dir)) {
@@ -841,7 +850,6 @@ run_LOHHLA <- function(opt) {
         ' F2=', chr6.f2,
         ' VALIDATION_STRINGENCY=SILENT', sep = '')
       logger(samToFastQ)
-      system(samToFastQ)
 
       # system(glue('wc -l {chr6.f1} {chr6.f2}'))
 
@@ -854,16 +862,39 @@ run_LOHHLA <- function(opt) {
         ## Overwrite chr6.f1 and chr6.2 to include fished reads
         combine.fastqs(chr6.f1, fished.f1)
         combine.fastqs(chr6.f2, fished.f2)
-      }
-
-      if (is.null(chr6.f1)) {
-        logger(glue('No reads extracted for {BAMfile} f1'))
+        # less(chr6.f1)
+        # less(chr6.f2)
+        # system(glue('wc -l {chr6.f1}'), intern = T)
+        # system(glue('wc -l {chr6.f2}'), intern = T)
       }
 
       logger(glue('{BAMfile}: aligning (fished) reads to all HLA alleles'))
 
+      F1_read_count <- length(readLines(chr6.f1))
+      F2_read_count <- length(readLines(chr6.f2))
+      if (F1_read_count == 0 && F2_read_count == 0) {
+        logger(sprintf('No reads could be extracted from bam file for %s',
+            BAMfile))
+        next
+      } else if (F1_read_count == 0 && F2_read_count > 0) {
+        ## This shouldn't happen
+        logger(sprintf('Detected a false expectation in read alignment code %s',
+            BAMfile))
+        next
+      } else if (F1_read_count > 0 && F2_read_count == 0) {
+        logger(sprintf('Detected single-end sequencing for %s',
+            BAMfile))
+        mapping_source_files <- chr6.f1
+        paired_end = F
+      } else if (F1_read_count > 0 && F2_read_count > 0) {
+        logger(sprintf('Detected paired-end sequencing for %s',
+            BAMfile))
+        mapping_source_files <- paste0(chr6.f1, ' ', chr6.f2)
+        paired_end = T
+      }
+
       alignCMD <- paste0(novoDir, '/novoalign -d ', patient_hla_fasta_index_fn,
-        ' -f ', chr6.f1, ' ', chr6.f2,
+        ' -f ', mapping_source_files,
         ' -F STDFQ -R 0 -r All 9999 -o SAM -o FullNW',
         ' -c ', novoThreads,
         ' 1> ', sample_dir, '/', BAMid,
@@ -899,21 +930,26 @@ run_LOHHLA <- function(opt) {
       logger(removeDup)
       system(removeDup)
 
-      ## Only take reads that are in proper pair
-      ## From samtools manual:
-      ## -f INT
-      ## Only output alignments with all bits set in INT present in the FLAG
-      ## field. INT can be specified in hex by beginning with `0x' (i.e.
-      ## /^0x[0-9A-F]+/) or in octal by beginning with `0' (i.e. /^0[0-7]+/)
-      ## [0].
-      readPairs <- paste(samtools, ' view -f 2 -b -o ',
-        hlaBAMfile,
-        ' ',
-        sample_dir, '/', BAMid,
-        '.chr6region.patient.reference.hlas.csorted.noduplicates.bam',
-        sep = '')
-      logger(readPairs)
-      system(readPairs)
+      if (requirePairedReads && paired_end == T) {
+        ## Only take reads that are in proper pair
+        ## From samtools manual:
+        ## -f INT
+        ## Only output alignments with all bits set in INT present in the FLAG
+        ## field. INT can be specified in hex by beginning with `0x' (i.e.
+        ## /^0x[0-9A-F]+/) or in octal by beginning with `0' (i.e. /^0[0-7]+/)
+        ## [0].
+        readPairs <- paste(samtools, ' view -f 2 -b -o ',
+          hlaBAMfile,
+          ' ',
+          sample_dir, '/', BAMid,
+          '.chr6region.patient.reference.hlas.csorted.noduplicates.bam',
+          sep = '')
+        logger(readPairs)
+        system(readPairs)
+      } else {
+        hlaBAMfile <- paste0(sample_dir, '/', BAMid,
+          '.chr6region.patient.reference.hlas.csorted.noduplicates.bam')
+      }
 
       ## index the aligned bam
       indexBAM <- paste0(samtools, ' index ', hlaBAMfile)
@@ -934,12 +970,14 @@ run_LOHHLA <- function(opt) {
           BAM_tmp_fn, ' ', hlaBAMfile, ' ', allele)
         logger(getReads)
         system(getReads)
+        # system(sprintf('samtools view %s', hlaBAMfile))
 
         if (is.null(BAM_tmp_fn) || is.na(BAM_tmp_fn) ||
           !file.exists(BAM_tmp_fn) || file.size(BAM_tmp_fn) <= 464) {
-          msg <- sprintf('No reads mapped to %s', allele)
+          msg <- sprintf('No reads mapped to %s in %s', allele, BAMfile)
           howToWarn(msg)
           logger(msg)
+          next
           # system(sprintf('samtools view %s', BAM_filtered_fn))
           # system(sprintf('ls -ltr %s', BAM_filtered_fn))
         }
@@ -952,9 +990,10 @@ run_LOHHLA <- function(opt) {
         logger(samtoolsIndex)
         system(samtoolsIndex)
 
-        ## And filter out reads that have too many events -- has to be done here
+        ## Filter out reads that have too many events -- has to be done here
         ## because some reads map to multiple alleles
-        passed_reads <- count_events(BAM_fn, n = numMisMatch)
+        passed_reads <- count_events(BAM_fn, n = numMisMatch, 
+          paired_end = paired_end)
         if (is.null(passed_reads)) {
           msg <- sprintf('Could not get mapping reads for %s', allele)
           howToWarn(msg)
@@ -1113,7 +1152,6 @@ run_LOHHLA <- function(opt) {
             HLA_A_type2 = repl_NA(HLA_As[2])))
       } else {
         if (F && HLA_gene == 'hla_c') browser()
-        # browser()
         logger(sprintf('analyzing coverage differences in sample: %s, hla: %s',
             sample, HLA_gene))
 

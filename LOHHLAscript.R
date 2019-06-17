@@ -63,10 +63,13 @@ option_list = list(
               help="specify location of jellyfish binary", metavar="character"),
   make_option(c("-bt", "--bedtools"), type="character", default='bedtools',
               help="specify location of bedtools binary", metavar="character"),
-  make_option(c("-fe", "--fnExt"), type="character", default='',
-              help="Extension to append to output file tables", metavar="character"),
-  make_option(c("-st", "--samtools"), type="character", default='samtools',
-              help="specify location of samtools binary", metavar="character")
+  make_option(c('-fe', '--fnExt'), type='character', default='',
+              help='Extension to append to output file', metavar='character'),
+  make_option(c('-st', '--samtools'), type='character', default='samtools',
+              help='specify location of samtools binary', metavar='character'),
+  make_option(c('-rpr', '--requirePairedReads'), type='logical', default=TRUE,
+              help=glue('whether to require reads to paired, ignored if',
+                'single-end sequencing is detected'), metavar='character')
 )
 
 opt_parser <- OptionParser(option_list=option_list)
