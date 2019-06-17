@@ -1228,8 +1228,8 @@ run_LOHHLA <- function(opt) {
         if (any(runWithNormal)) {
           HLA_A_type1normal <- tryCatch(read.table(HLA_A_type1normalLoc,
             sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
-          error = function(e) { logger(
-            glue('Could not access {HLA_A_type1normalLoc}')) })
+            error = function(e) { logger(
+              glue('Could not access {HLA_A_type1normalLoc}')) })
           if (is.null(HLA_A_type1normal)) {
             return(list(message = glue('no_pileup_for_normal_{HLA_gene}_1'),
                 HLA_A_type1 = HLA_A_type1,
@@ -1238,8 +1238,8 @@ run_LOHHLA <- function(opt) {
 
           HLA_A_type2normal <- tryCatch(read.table(HLA_A_type2normalLoc,
             sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
-          error = function(e) { logger(
-            glue('Could not access {HLA_A_type2normalLoc}')) })
+            error = function(e) { logger(
+              glue('Could not access {HLA_A_type2normalLoc}')) })
           if (is.null(HLA_A_type2normal)) {
             return(list(message = glue('no_pileup_for_normal_{HLA_gene}_2'),
                 HLA_A_type1 = HLA_A_type1,
@@ -1339,7 +1339,6 @@ run_LOHHLA <- function(opt) {
           HLA_A_type2normal$mm_position)
         HLA_A_type2normal <-
           HLA_A_type2normal[HLA_A_type2normal$mm_position %in% tmp, , drop = FALSE] %>% unique
-
         HLA_A_type2tumor <-
           HLA_A_type2tumor[HLA_A_type2tumor$mm_position %in% tmp, , drop = FALSE] %>% unique
 
@@ -1443,6 +1442,7 @@ run_LOHHLA <- function(opt) {
               ' > ',
               workDir, '/', sample, '.', HLA_A_type1, '.normal.NoMissMatch.bam',
               sep = '')
+            logger(Type1NormalCmd)
             system(Type1NormalCmd)
           }
           ## }}} Type 1
@@ -1463,6 +1463,7 @@ run_LOHHLA <- function(opt) {
               workDir, '/', sample, '.', HLA_A_type2, '.bed', ' > ',
               workDir, '/', sample, '.', HLA_A_type2, '.normal.NoMissMatch.bam',
               sep = '')
+            logger(Type2NormalCmd)
             system(Type2NormalCmd)
           }
           ## }}} Type 2
@@ -1474,7 +1475,8 @@ run_LOHHLA <- function(opt) {
           nomismatch_pu <- paste0(workDir, '/', sample, '.',
             HLA_A_type1, '.tumor.NoMissMatch.pileup')
           MpilupType1TumorCmd <- paste(samtools, ' mpileup ',
-            nomismatch_bam, ' -f ', HLAfastaLoc, ' > ', nomismatch_pu, sep = '')
+            nomismatch_bam, ' -f ', HLAfastaLoc, ' > ', nomismatch_pu, 
+            sep = '')
           logger(MpilupType1TumorCmd)
           system(MpilupType1TumorCmd)
 
@@ -1601,7 +1603,7 @@ run_LOHHLA <- function(opt) {
               rep(0, length(HLA_type1normal_nomissmatchCov))
             names(HLA_type1tumor_nomissmatchCov) <-
               names(HLA_type1normal_nomissmatchCov)
-            HLA_type1tumor_nomissmatchCov[HLA_type1tumor_nomissmatch$rownames] <-
+            HLA_type1tumor_nomissmatchCov[as.character(HLA_type1tumor_nomissmatch$rownames)] <-
               HLA_type1tumor_nomissmatch$V4
             ## }}} Type 1
             ## {{{ Type 2
@@ -1625,7 +1627,7 @@ run_LOHHLA <- function(opt) {
               rep(0, length(HLA_type2normal_nomissmatchCov))
             names(HLA_type2tumor_nomissmatchCov) <-
               names(HLA_type2normal_nomissmatchCov)
-            HLA_type2tumor_nomissmatchCov[rownames(HLA_type2tumor_nomissmatch)] <-
+            HLA_type2tumor_nomissmatchCov[as.character(HLA_type2tumor_nomissmatch$rownames)] <-
               HLA_type2tumor_nomissmatch$V4
             ## }}} Type 2
           }
