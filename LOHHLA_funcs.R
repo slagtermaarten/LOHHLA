@@ -245,15 +245,27 @@ combine.fastqs <- function(chr6, fished) {
     })
 
   if (!is.null(fished.seq)) {
-    fished.names <- fished.seq[seq(1, nrow(fished.seq), by = 4), ]
-    fished.names.nodup <- fished.names[-which(fished.names %in% chr6.seq$V1)]
+    fished.names <- fished.seq[seq(1, nrow(fished.seq), by = 4), ] %>% unique
+
+    ## Combine with chr6 reads
+    if (!is.null(chr6.seq) && is.data.frame(chr6.seq) && nrow(chr6.seq) > 0) {
+      ## Ensure that reads aren't already included due to multi-mapping
+      fished.names.nodup <- fished.names[-which(fished.names %in% chr6.seq$V1)]
+    } else {
+      fished.names.nodup <- fished.names
+    }
+
     fished.seq.toadd <- lapply(which(fished.seq$V1 %in% fished.names.nodup),
       function(x) return(fished.seq[x:(x+3), ]) )
     fished.seq.toadd <- unlist(fished.seq.toadd)
-    new.chr6.seq <- c(chr6.seq$V1, fished.seq.toadd)
-    if (!is.null(new.chr6.seq)) {
-      write_tsv(new.chr6.seq, chr6, row.names = FALSE, col.names = FALSE)
-    }
+  } else {
+    fished.seq.toadd <- NULL
+  }
+
+  new.chr6.seq <- c(chr6.seq$V1, fished.seq.toadd)
+
+  if (!is.null(new.chr6.seq)) {
+    write_tsv(new.chr6.seq, chr6, row.names = FALSE, col.names = FALSE)
   }
 }
 
@@ -852,7 +864,6 @@ run_LOHHLA <- function(opt) {
       logger(samToFastQ)
 
       # system(glue('wc -l {chr6.f1} {chr6.f2}'))
-
       if (fishingStep) {
         logger('Adding reads aligned to alternate loci')
         ## Generate fished.f1 & fished.f2 fastqs
@@ -864,6 +875,8 @@ run_LOHHLA <- function(opt) {
         combine.fastqs(chr6.f2, fished.f2)
         # less(chr6.f1)
         # less(chr6.f2)
+        # less(fished.f1)
+        # less(fished.f1)
         # system(glue('wc -l {chr6.f1}'), intern = T)
         # system(glue('wc -l {chr6.f2}'), intern = T)
       }
@@ -992,7 +1005,7 @@ run_LOHHLA <- function(opt) {
 
         ## Filter out reads that have too many events -- has to be done here
         ## because some reads map to multiple alleles
-        passed_reads <- count_events(BAM_fn, n = numMisMatch, 
+        passed_reads <- count_events(BAM_fn, n = numMisMatch,
           paired_end = paired_end)
         if (is.null(passed_reads)) {
           msg <- sprintf('Could not get mapping reads for %s', allele)
@@ -1475,7 +1488,7 @@ run_LOHHLA <- function(opt) {
           nomismatch_pu <- paste0(workDir, '/', sample, '.',
             HLA_A_type1, '.tumor.NoMissMatch.pileup')
           MpilupType1TumorCmd <- paste(samtools, ' mpileup ',
-            nomismatch_bam, ' -f ', HLAfastaLoc, ' > ', nomismatch_pu, 
+            nomismatch_bam, ' -f ', HLAfastaLoc, ' > ', nomismatch_pu,
             sep = '')
           logger(MpilupType1TumorCmd)
           system(MpilupType1TumorCmd)
