@@ -1841,11 +1841,16 @@ run_LOHHLA <- function(opt) {
           names(HLA_A_type2tumorCov))), na.rm = T)
         endChar <- max(as.numeric(c(names(HLA_A_type1tumorCov),
           names(HLA_A_type2tumorCov))), na.rm = T)
+
+        ## Adapt bin size if it's too big
+        if (binSize > (endChar - startChar)) {
+          binSize <- ceiling((endChar - startChar) / 10)
+        }
         seqToConsider <- seq(startChar, endChar, by = binSize)
         seqToConsider <- c(seqToConsider[-length(seqToConsider)], endChar + 1)
 
         binLogR <- c()
-        for (i in 1:(length(seqToConsider)-1)) {
+        for (i in 1:(length(seqToConsider) - 1)) {
           PotentialSites <- as.character(seqToConsider[i]:seqToConsider[i+1])
           shared_sites <- PotentialSites %>%
             intersect(names(HLA_A_type1tumorCov)) %>%
