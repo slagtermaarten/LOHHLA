@@ -1,10 +1,10 @@
 ## {{{ Install required libraries if required
 for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
-    'naturalsort', 'glue', 'magrittr', 'tools', 'purrr')) {
+    'naturalsort', 'glue', 'magrittr', 'tools', 'purrr', 'data.table')) {
   if (!require(p, character.only = T)) {
     install.packages(p, character = T)
   }
-  require(p, quietly = T, character.only = T)
+  library(p, quietly = T, character.only = T)
 }
 
 if (!requireNamespace('strandCheckR', quietly = TRUE)) {
@@ -20,7 +20,7 @@ write_tsv <- function(object, filename, append = F,
   col.names = T, row.names = F) {
   if (append == T && !file.exists(filename)) {
     dir.create(dirname(filename), recursive = T, showWarnings = F)
-    system(glue('touch {filename}'), intern = T)
+    system(glue::glue('touch {filename}'), intern = T)
   }
   # less(filename)
   tryCatch(
@@ -206,7 +206,7 @@ identify_kmers <- function(workDir, kmerSize, HLAfastaLoc, jellyFish) {
 
 
 get.partially.matching.reads <- function(workDir, sample_dir, BAMDir, BAMfile,
-  kmerSize, gatkDir) {
+  kmerSize, gatkDir, samtools) {
   kmerFile <- paste(workDir, '/', kmerSize, 'mer_uniq', sep = '')
 
   # add header
@@ -235,13 +235,13 @@ combine.fastqs <- function(chr6, fished) {
   chr6.seq <- tryCatch(read.table(chr6, sep = '\t',
     stringsAsFactors = FALSE, comment.char = '', quote = ''),
     error = function(e) {
-      logger(glue('Could not open chr6 {chr6}'))
+      logger(glue::glue('Could not open chr6 {chr6}'))
     })
 
   fished.seq <- tryCatch(read.table(fished, sep = '\t',
     stringsAsFactors = FALSE, comment.char = '', quote = ''),
     error = function(e) {
-      logger(glue('Could not open fished {fished}'))
+      logger(glue::glue('Could not open fished {fished}'))
     })
 
   if (!is.null(fished.seq)) {
@@ -385,7 +385,7 @@ getMisMatchPositionsPairwiseAlignment <- function(alignment,
 
 
 getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
-  tumorBAMfile, normalBAMfile, overrideDir = NULL) {
+  tumorBAMfile, normalBAMfile, overrideDir = NULL, samtools) {
   if (!override) {
     outDir <- paste(workDir, '/flagstat/', sep = '')
     if (!file.exists(outDir)) {
@@ -555,7 +555,7 @@ run_LOHHLA <- function(opt) {
   kmerSize <- opt$kmerSize
   fishingStep <- opt$fishingStep
   coverageStep <- opt$coverageStep
-  plottingStep <- opt$plottingStep
+  plottingStep <- as.logical(opt$plottingStep)
   ignoreWarnings <- opt$ignoreWarnings
   HLAexonLoc <- opt$HLAexonLoc
   requirePairedReads <- opt$requirePairedReads
@@ -567,11 +567,8 @@ run_LOHHLA <- function(opt) {
   novoThreads <- opt$novoThreads
   genomeAssembly <- tolower(opt$genomeAssembly)
   jellyFish <- opt$jellyFish
-  stopifnot(file.exists(jellyFish))
   bedtools <- opt$bedtools
-  stopifnot(file.exists(bedtools))
   samtools <- opt$samtools
-  stopifnot(file.exists(samtools))
   fnExt <- opt$fnExt
 
   if (is.null(BAMDir) || is.null(outputDir) ||
@@ -862,13 +859,14 @@ run_LOHHLA <- function(opt) {
         ' F2=', chr6.f2,
         ' VALIDATION_STRINGENCY=SILENT', sep = '')
       logger(samToFastQ)
+      system(samToFastQ)
 
       # system(glue('wc -l {chr6.f1} {chr6.f2}'))
       if (fishingStep) {
         logger('Adding reads aligned to alternate loci')
         ## Generate fished.f1 & fished.f2 fastqs
         get.partially.matching.reads(workDir, sample_dir, BAMDir, BAMfile,
-          kmerSize, gatkDir)
+          kmerSize, gatkDir, samtools)
         logger('Combine chr6 reads with fished reads from alternate loci')
         ## Overwrite chr6.f1 and chr6.2 to include fished reads
         combine.fastqs(chr6.f1, fished.f1)
@@ -881,7 +879,7 @@ run_LOHHLA <- function(opt) {
         # system(glue('wc -l {chr6.f2}'), intern = T)
       }
 
-      logger(glue('{BAMfile}: aligning (fished) reads to all HLA alleles'))
+      logger(glue::glue('{BAMfile}: aligning (fished) reads to all HLA alleles'))
 
       F1_read_count <- length(readLines(chr6.f1))
       F2_read_count <- length(readLines(chr6.f2))
@@ -1008,7 +1006,8 @@ run_LOHHLA <- function(opt) {
         passed_reads <- count_events(BAM_fn, n = numMisMatch,
           paired_end = paired_end)
         if (is.null(passed_reads)) {
-          msg <- sprintf('Could not get mapping reads for %s', allele)
+          msg <- sprintf('Could not get mapping reads for %s-%s', 
+            BAM_fn, allele)
           howToWarn(msg)
           logger(msg)
           # system(sprintf('cp %s %s', BAM_fn, BAM_filtered_fn))
@@ -1044,7 +1043,7 @@ run_LOHHLA <- function(opt) {
         msg <- sprintf('No filtered bam files were made for %s, aborting LOHHLA',
           sample)
         logger(msg)
-        error_msg <- glue('{error_msg};no_filtered_bam_present_{sample}')
+        error_msg <- glue::glue('{error_msg};no_filtered_bam_present_{sample}')
         next
       }
 
@@ -1088,11 +1087,11 @@ run_LOHHLA <- function(opt) {
           logger(cmd)
           system(cmd)
         }
-        logger(system(glue('head {mpileupFile} -n 1'), intern = T))
+        logger(system(glue::glue('head {mpileupFile} -n 1'), intern = T))
       }
     }
     test_error_presence <- sapply(samples, function(sample) {
-      grepl(glue('no_filtered_bam_present_{sample}'), error_msg)
+      grepl(glue::glue('no_filtered_bam_present_{sample}'), error_msg)
     }) %>% any(na.rm = T)
     if (test_error_presence) {
       coverageStep <- F
@@ -1107,10 +1106,11 @@ run_LOHHLA <- function(opt) {
       sample_uniq_mapped_reads <-
         getUniqMapReads(workDir = workDir, BAMDir = BAMDir,
           tumorBAMfile = tumorBAMfile, normalBAMfile = normalBAMfile,
-          override = FALSE)
+          override = FALSE, samtools = samtools)
     } else {
       sample_uniq_mapped_reads <- getUniqMapReads(workDir = workDir,
-        BAMDir = BAMDir, override = TRUE, overrideDir = overrideDir)
+        BAMDir = BAMDir, override = TRUE, overrideDir = overrideDir, 
+        samtools = samtools)
     }
 
     ## In case of multiple normal samples, reduce to the best normal sample
@@ -1160,7 +1160,7 @@ run_LOHHLA <- function(opt) {
       HLA_As <- grep(HLA_gene, hlaAlleles, value = TRUE)
       ## Change this to a test of whether coverage files are present
       if (!coverageStep) {
-        return(list(message = glue('did_not_perform_coverage_{error_msg}'),
+        return(list(message = glue::glue('did_not_perform_coverage_{error_msg}'),
             HLA_A_type1 = repl_NA(HLA_As[1]),
             HLA_A_type2 = repl_NA(HLA_As[2])))
       } else {
@@ -1242,9 +1242,9 @@ run_LOHHLA <- function(opt) {
           HLA_A_type1normal <- tryCatch(read.table(HLA_A_type1normalLoc,
             sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
             error = function(e) { logger(
-              glue('Could not access {HLA_A_type1normalLoc}')) })
+              glue::glue('Could not access {HLA_A_type1normalLoc}')) })
           if (is.null(HLA_A_type1normal)) {
-            return(list(message = glue('no_pileup_for_normal_{HLA_gene}_1'),
+            return(list(message = glue::glue('no_pileup_for_normal_{HLA_gene}_1'),
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
@@ -1252,9 +1252,9 @@ run_LOHHLA <- function(opt) {
           HLA_A_type2normal <- tryCatch(read.table(HLA_A_type2normalLoc,
             sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
             error = function(e) { logger(
-              glue('Could not access {HLA_A_type2normalLoc}')) })
+              glue::glue('Could not access {HLA_A_type2normalLoc}')) })
           if (is.null(HLA_A_type2normal)) {
-            return(list(message = glue('no_pileup_for_normal_{HLA_gene}_2'),
+            return(list(message = glue::glue('no_pileup_for_normal_{HLA_gene}_2'),
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
@@ -1290,7 +1290,7 @@ run_LOHHLA <- function(opt) {
             quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
           error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type1tumor)) {
-          return(list(message = glue('no_pileup_for_tumor_{HLA_gene}_1'),
+          return(list(message = glue::glue('no_pileup_for_tumor_{HLA_gene}_1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1334,7 +1334,7 @@ run_LOHHLA <- function(opt) {
             quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
           error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type2tumor)) {
-          return(list(message = glue('no_pileup_for_tumor_{HLA_gene}_2'),
+          return(list(message = glue::glue('no_pileup_for_tumor_{HLA_gene}_2'),
               HLA_A_type2 = HLA_A_type2,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1387,7 +1387,7 @@ run_LOHHLA <- function(opt) {
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue('mismatch_pos_density_imbalance_in_normal_allele1'),
+              message = glue::glue('mismatch_pos_density_imbalance_in_normal_allele1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1397,7 +1397,7 @@ run_LOHHLA <- function(opt) {
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue('mismatch_pos_density_imbalance_in_normal_allele2'),
+              message = glue::glue('mismatch_pos_density_imbalance_in_normal_allele2'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
