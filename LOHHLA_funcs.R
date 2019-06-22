@@ -570,6 +570,7 @@ run_LOHHLA <- function(opt) {
   bedtools <- opt$bedtools
   samtools <- opt$samtools
   fnExt <- opt$fnExt
+  forceRedo <- opt$forceRedo
 
   if (is.null(BAMDir) || is.null(outputDir) ||
       is.null(normalBAMfile) ||
@@ -694,7 +695,7 @@ run_LOHHLA <- function(opt) {
 
   ## {{{ Pre-mapping step: double check whether we actually want to do the
   ## mappingStep or that we can skip it.
-  if (mappingStep) {
+  if (!forceRedo && mappingStep) {
     all_exist <- TRUE
     for (BAMfile in BAMfiles) {
       BAMid <- unlist(strsplit(BAMfile, split = '.bam'))[1]
@@ -715,6 +716,7 @@ run_LOHHLA <- function(opt) {
     }
   }
   ## }}}
+  browser()
 
   ## {{{ Mapping step
   if (mappingStep) {
@@ -857,8 +859,8 @@ run_LOHHLA <- function(opt) {
         ' I=', sam_file,
         ' F=', chr6.f1,
         ' F2=', chr6.f2,
-        ' INCLUDE_NON_PF_READS=true ',
-        ' INCLUDE_NON_PRIMARY_ALIGNMENTS=true ',
+        ' INCLUDE_NON_PF_READS=true',
+        ' INCLUDE_NON_PRIMARY_ALIGNMENTS=true',
         ' VALIDATION_STRINGENCY=SILENT', sep = '')
       logger(samToFastQ)
       system(samToFastQ)

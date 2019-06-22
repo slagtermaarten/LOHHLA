@@ -67,6 +67,9 @@ option_list = list(
               help='Extension to append to output file', metavar='character'),
   make_option(c('-st', '--samtools'), type='character', default='samtools',
               help='specify location of samtools binary', metavar='character'),
+  make_option(c('-fr', '--forceRedo'), type='logical', default=F,
+              help='Whether to repeat mapping step even though the mapped files are already present', 
+              metavar='character')
   make_option(c('-rpr', '--requirePairedReads'), type='logical', default=TRUE,
               help='whether to require reads to paired, ignored if single-end sequencing is detected', 
               metavar='character')
