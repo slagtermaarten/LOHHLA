@@ -212,18 +212,22 @@ get.partially.matching.reads <- function(workDir, sample_dir, BAMDir, BAMfile,
   # add header
   cmd <- paste(samtools, ' view -H ', BAMDir, '/', BAMfile, ' > ',
                sample_dir, '/fished.sam', sep = '')
+  logger(cmd)
   system(cmd)
 
   # fish partially matching reads
   cmd <- paste(samtools, ' view ', BAMDir, '/', BAMfile, ' | grep -F -f ',
                kmerFile, ' >> ', sample_dir, '/fished.sam', sep = '')
+  logger(cmd)
   system(cmd)
 
   ## convert to fastq
   cmd <- paste('java -jar ', gatkDir, '/SamToFastq.jar',
     ' I=', sample_dir, '/fished.sam',
     ' F=', sample_dir, '/fished.1.fastq',
-    ' F2=', sample_dir, '/fished.2.fastq VALIDATION_STRINGENCY=SILENT', sep = '')
+    ' F2=', sample_dir, '/fished.2.fastq',
+    ' VALIDATION_STRINGENCY=SILENT', sep = '')
+  logger(cmd)
   system(cmd)
 }
 
@@ -716,7 +720,6 @@ run_LOHHLA <- function(opt) {
     }
   }
   ## }}}
-  browser()
 
   ## {{{ Mapping step
   if (mappingStep) {
@@ -860,12 +863,25 @@ run_LOHHLA <- function(opt) {
         ' F=', chr6.f1,
         ' F2=', chr6.f2,
         ' INCLUDE_NON_PF_READS=true',
-        ' INCLUDE_NON_PRIMARY_ALIGNMENTS=true',
+        # ' INCLUDE_NON_PRIMARY_ALIGNMENTS=true',
+        # ' INCLUDE_NON_PRIMARY_ALIGNMENTS=false',
         ' VALIDATION_STRINGENCY=SILENT', sep = '')
       logger(samToFastQ)
       system(samToFastQ)
+      logger(sprintf('Sam_file read count: %d, chr6.f1: %d, chr6.f2: %d', 
+        tryCatch(length(readLines(sam_file)), error = function(e) { 0 }),
+        tryCatch(length(readLines(chr6.f1)), error = function(e) { 0 }), 
+        tryCatch(length(readLines(chr6.f2)), error = function(e) { 0 })))
 
-      # system(glue('wc -l {chr6.f1} {chr6.f2}'))
+      # readLines(chr6.f2)
+      # less(sam_file)
+      # read_sam <- function(fn) {
+      #   grep('^@.*', readLines(sam_file), value = T, invert = T) %>%
+      #     strsplit('\t') %>%
+      #     map(~as.list(setNames(.x, 1:length(.x)))) %>%
+      #     rbindlist(fill = T)
+      # }
+
       if (fishingStep) {
         logger('Adding reads aligned to alternate loci')
         ## Generate fished.f1 & fished.f2 fastqs
@@ -1040,21 +1056,23 @@ run_LOHHLA <- function(opt) {
     for (sample in samples) {
       logger(sprintf('get coverage of HLA alleles for sample: %s', sample))
       sample_dir <- paste(workDir, '/', sample, sep = '')
+
       filteredBAMfiles <- grep('filtered.bam$',
         grep('type', list.files(sample_dir, recursive = T), value = TRUE),
         value = TRUE)
-      if (length(filteredBAMfiles) == 0) {
-        msg <- sprintf('No filtered bam files were made for %s, aborting LOHHLA',
-          sample)
-        logger(msg)
-        error_msg <- glue::glue('{error_msg};no_filtered_bam_present_{sample}')
-        next
-      }
 
       if (sample %in% tumorName) {
         type <- 'tumor'
       } else {
         type <- 'normal'
+      }
+
+      if (length(filteredBAMfiles) == 0) {
+        msg <- glue('No filtered bam files were made for {sample}, ', 
+          'aborting LOHHLA coverage')
+        logger(msg)
+        error_msg <- glue::glue('{error_msg}no_filtered_bam_present_{type};')
+        next
       }
 
       ## 2019-04-09 17:24 Verify not all filtered bam files are identical
@@ -1095,7 +1113,7 @@ run_LOHHLA <- function(opt) {
       }
     }
     test_error_presence <- sapply(samples, function(sample) {
-      grepl(glue::glue('no_filtered_bam_present_{sample}'), error_msg)
+      grepl(glue::glue('no_filtered_bam_present'), error_msg)
     }) %>% any(na.rm = T)
     if (test_error_presence) {
       coverageStep <- F
@@ -1164,7 +1182,7 @@ run_LOHHLA <- function(opt) {
       HLA_As <- grep(HLA_gene, hlaAlleles, value = TRUE)
       ## Change this to a test of whether coverage files are present
       if (!coverageStep) {
-        return(list(message = glue::glue('did_not_perform_coverage_{error_msg}'),
+        return(list(message = glue::glue('{error_msg}did_not_perform_coverage;'),
             HLA_A_type1 = repl_NA(HLA_As[1]),
             HLA_A_type2 = repl_NA(HLA_As[2])))
       } else {
@@ -1183,11 +1201,12 @@ run_LOHHLA <- function(opt) {
         }
 
         if (length(HLA_As) == 1) {
-          return(list(message = 'homozygous_alleles_not_implemented',
+          return(list(message =
+              glue('{error_msg}homozygous_alleles_not_implemented;'),
               HLA_A_type1 = repl_NA(HLA_As[1]),
               HLA_A_type2 = repl_NA(HLA_As[2])))
         } else if (length(HLA_As) == 0) {
-          return(list(message = 'no_recognized_alleles'))
+          return(list(message = glue('{error_msg}no_recognized_alleles;')))
         }
         HLA_A_type1 <- HLA_As[1]
         HLA_A_type2 <- HLA_As[2]
@@ -1211,9 +1230,9 @@ run_LOHHLA <- function(opt) {
         if (length(missMatchPositions$diffSeq1) == 0) {
           msg <- 'HLA alleles are identical, although they have different names'
           logger(msg)
-          return(list(message = 'alleles_identical',
+          return(list(message = glue('{error_msg}alleles_identical;',
               HLA_A_type1 = HLA_A_type1,
-              HLA_A_type2 = HLA_A_type2))
+              HLA_A_type2 = HLA_A_type2)))
         }
         if (length(missMatchPositions$diffSeq1) < 5) {
           msg <- glue::glue('HLA alleles are very similar (fewer than 5 \\
@@ -1237,7 +1256,7 @@ run_LOHHLA <- function(opt) {
           msg <- sprintf('No coverage in normal sample, aborting %s', HLA_gene)
           howToWarn(msg)
           logger(msg)
-          return(list(message = 'no_pileup_for_normal',
+          return(list(message = glue('{error_msg}no_pileup_for_normal'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1248,7 +1267,7 @@ run_LOHHLA <- function(opt) {
             error = function(e) { logger(
               glue::glue('Could not access {HLA_A_type1normalLoc}')) })
           if (is.null(HLA_A_type1normal)) {
-            return(list(message = glue::glue('no_pileup_for_normal_{HLA_gene}_1'),
+            return(list(message = glue('{error_msg}no_pileup_for_normal_{HLA_gene}_1'),
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
@@ -1258,7 +1277,7 @@ run_LOHHLA <- function(opt) {
             error = function(e) { logger(
               glue::glue('Could not access {HLA_A_type2normalLoc}')) })
           if (is.null(HLA_A_type2normal)) {
-            return(list(message = glue::glue('no_pileup_for_normal_{HLA_gene}_2'),
+            return(list(message = glue('{error_msg}no_pileup_for_normal_{HLA_gene}_2'),
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
@@ -1294,7 +1313,7 @@ run_LOHHLA <- function(opt) {
             quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
           error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type1tumor)) {
-          return(list(message = glue::glue('no_pileup_for_tumor_{HLA_gene}_1'),
+          return(list(message = glue('{error_msg}no_pileup_for_tumor_{HLA_gene}_1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1338,7 +1357,7 @@ run_LOHHLA <- function(opt) {
             quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
           error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type2tumor)) {
-          return(list(message = glue::glue('no_pileup_for_tumor_{HLA_gene}_2'),
+          return(list(message = glue('{error_msg}no_pileup_for_tumor_{HLA_gene}_2'),
               HLA_A_type2 = HLA_A_type2,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1380,7 +1399,8 @@ run_LOHHLA <- function(opt) {
           msg <- glue::glue('No position has greater than minimum \\
             coverage filter for {HLA_gene}')
           logger(msg)
-          return(list(message = 'no_position_sufficiently_covered_in_normal',
+          return(list(message =
+              glue('{error_msg}no_position_sufficiently_covered_in_normal'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1391,7 +1411,7 @@ run_LOHHLA <- function(opt) {
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue::glue('mismatch_pos_density_imbalance_in_normal_allele1'),
+              message = glue('{error_msg}mismatch_pos_density_imbalance_in_normal_allele1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1401,7 +1421,7 @@ run_LOHHLA <- function(opt) {
           logger(msg)
           howToWarn(msg)
           return(list(
-              message = glue::glue('mismatch_pos_density_imbalance_in_normal_allele2'),
+              message = glue('{error_msg}mismatch_pos_density_imbalance_in_normal_allele2'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -2303,14 +2323,13 @@ run_LOHHLA <- function(opt) {
           HLA_type2copyNum_withBAFBin_upper <- NA
         }
 
-
         ## save some temporary files before plotting
         statistics_fn <- paste(figureDir, '/', sample, '.', HLA_gene,
             '.tmp.data.plots.RData', sep = '')
         save.image(statistics_fn)
 
         return(list(
-          message='analysis_ok',
+          message=glue('{error_msg}analysis_completed'),
           HLA_A_type1=HLA_A_type1,
           HLA_A_type2=HLA_A_type2,
           HLAtype1Log2MedianCoverage=HLAtype1Log2MedianCoverage,
