@@ -6,10 +6,6 @@ for (p in c('seqinr', 'Biostrings', 'beeswarm', 'zoo', 'Rsamtools', 'dplyr',
   }
   library(p, quietly = T, character.only = T)
 }
-
-if (!requireNamespace('strandCheckR', quietly = TRUE)) {
-  BiocManager::install('strandCheckR')
-}
 ## }}}
 
 ## {{{ Helper functions
@@ -50,6 +46,16 @@ repl_NA <- function(vec, replacement = NA) {
 #'
 remove_NA <- function(vec) {
   vec[!is.na(vec)]
+}
+
+
+#' Cap infinite numbers
+#'
+#'
+replace_Inf <- function(x, max_val = 4, min_val = -4) {
+  x[x == -Inf] <- min_val
+  x[x == Inf] <- max_val
+  return(x)
 }
 
 
@@ -2032,14 +2038,12 @@ run_LOHHLA <- function(opt) {
           combinedTable$nBcombined <- NA
         }
 
-        nB_rawVal_withBAF <- median(combinedTable$nBcombined,
-          na.rm = TRUE)
+        nB_rawVal_withBAF <- median(combinedTable$nBcombined, na.rm = TRUE)
         nB_rawVal_withBAF_conf <- t.test.NA(combinedTable$nBcombined)
         nB_rawVal_withBAF_lower <- nB_rawVal_withBAF_conf$conf.int[1]
         nB_rawVal_withBAF_upper <- nB_rawVal_withBAF_conf$conf.int[2]
 
-        nA_rawVal_withBAF <- median(combinedTable$nAcombined,
-          na.rm = TRUE)
+        nA_rawVal_withBAF <- median(combinedTable$nAcombined, na.rm = TRUE)
         nA_rawVal_withBAF_conf <- t.test.NA(combinedTable$nAcombined)
         nA_rawVal_withBAF_lower <- nA_rawVal_withBAF_conf$conf.int[1]
         nA_rawVal_withBAF_upper <- nA_rawVal_withBAF_conf$conf.int[2]
@@ -2158,12 +2162,16 @@ run_LOHHLA <- function(opt) {
 
         tmpOut <- tmpOut[!duplicated(tmpOut[, 1]), , drop = FALSE]
         tmpOut <- tmpOut[!duplicated(tmpOut[, 3]), , drop = FALSE]
+        ## 2019-06-27 16:06 Restrict indices to entries where both alleles are
+        ## OK
+        good_idx <- !is.na(tmpOut$logR_1) & !is.na(tmpOut$logR_2)
+        tmpOut <- tmpOut[good_idx, ]
+        tmpOut$logR_1 <- replace_Inf(tmpOut$logR_1)
+        tmpOut$logR_2 <- replace_Inf(tmpOut$logR_2)
 
         if (nrow(tmpOut) > 1) {
           PairedTtest <- t.test.NA(tmpOut[, 2], tmpOut[, 4], paired = TRUE)
-          UnPairedTtest <- t.test.NA(
-            remove_NA(tmpOut[, 2]),
-            remove_NA(tmpOut[, 4]), paired = FALSE)
+          UnPairedTtest <- t.test.NA(tmpOut[, 2], tmpOut[, 4], paired = FALSE)
         } else {
           PairedTtest <- list(p.value = NA)
           UnPairedTtest <- list(p.value = NA)
@@ -2180,7 +2188,7 @@ run_LOHHLA <- function(opt) {
             magrittr::set_colnames(c('pos2', 'logR_1')) %>%
             dplyr::mutate('pos1' = pos2)
           tmpOut_unique <- tryCatch(merge(type1, type2, all = T, by = 'pos1'),
-          error = function(e) { print(e); browser() })
+            error = function(e) { print(e); browser() })
 
           dup1_unique <- setdiff(unique(tmpOut_unique[duplicated(tmpOut_unique[,
                 1]), 1]), NA)
@@ -2203,11 +2211,15 @@ run_LOHHLA <- function(opt) {
             drop = FALSE]
 
           if (nrow(tmpOut_unique) > 1) {
-            PairedTtest_unique <- t.test.NA(tmpOut_unique[, 2],
-              tmpOut_unique[, 4], paired = TRUE)
+            good_idx <- !is.na(tmpOut_unique[, 2]) & !is.na(tmpOut_unique[, 4])
+            tmpOut_unique <- tmpOut_unique[good_idx, ]
+            tmpOut_unique[, 2] <- replace_Inf(tmpOut_unique[, 2])
+            tmpOut_unique[, 4] <- replace_Inf(tmpOut_unique[, 4])
+
+            PairedTtest_unique <- t.test.NA(
+              tmpOut_unique[, 2], tmpOut_unique[, 4], paired = TRUE)
             UnPairedTtest_unique <- t.test.NA(
-              remove_NA(tmpOut_unique[, 2]),
-              remove_NA(tmpOut_unique[, 4]), paired = FALSE)
+              tmpOut_unique[, 2], tmpOut_unique[, 4], paired = FALSE)
           } else {
             PairedTtest_unique <- list(p.value = NA)
             UnPairedTtest_unique <- list(p.value = NA)
@@ -2380,8 +2392,8 @@ run_LOHHLA <- function(opt) {
         x
       }) %>% rbindlist(fill = T)
       , error = function(e) {
-      print('Problem with HLAoutPut'); print(e); browser()
-    })
+        print('Problem with HLAoutPut'); print(e); browser()
+      })
 
     combinedTable <- tryCatch(purrr::imap(HLAoutPut_l, function(x, idx)
         as.data.frame(cbind('hla' = hlas[idx], x[['combinedTable']]))),
