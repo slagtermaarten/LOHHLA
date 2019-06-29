@@ -3043,11 +3043,11 @@ run_LOHHLA <- function(opt) {
 
   ## {{{ Clean up tmp files
   if (cleanUp) {
-    cmd <- paste('rm ', workDir, '/', '*tumor*', sep = '')
+    cmd <- paste('rm -r ', workDir, '/', '*tumor*', sep = '')
     logger(cmd)
     system(cmd)
 
-    cmd <- paste('rm ', workDir, '/', '*normal*', sep = '')
+    cmd <- paste('rm 0r ', workDir, '/', '*normal*', sep = '')
     logger(cmd)
     system(cmd)
 
@@ -3090,11 +3090,11 @@ run_LOHHLA <- function(opt) {
     logger(cmd)
     system(cmd)
 
-    cmd <- paste('rm', workDir, '/', 'mer_counts.jf', sep = '')
+    cmd <- paste('rm ', workDir, '/', 'mer_counts.jf', sep = '')
     logger(cmd)
     system(cmd)
 
-    cmd <- paste('rm', workDir, '/', 'mer_counts_dumps.fa', sep = '')
+    cmd <- paste('rm ', workDir, '/', 'mer_counts_dumps.fa', sep = '')
     logger(cmd)
     system(cmd)
   }

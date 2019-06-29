@@ -69,7 +69,7 @@ option_list = list(
               help='specify location of samtools binary', metavar='character'),
   make_option(c('-fr', '--forceRedo'), type='logical', default=F,
               help='Whether to repeat mapping step even though the mapped files are already present', 
-              metavar='character')
+              metavar='character'),
   make_option(c('-rpr', '--requirePairedReads'), type='logical', default=TRUE,
               help='whether to require reads to paired, ignored if single-end sequencing is detected', 
               metavar='character')
