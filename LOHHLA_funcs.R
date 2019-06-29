@@ -675,26 +675,18 @@ run_LOHHLA <- function(opt) {
 
   ## check for homozygous alleles here to save time on mapping step.
   ## also figure out if hla names will be uniformly 'hla_x'
-  if (length(grep('hla_a', x = hlaAlleles)) == 1) {
-    msg <- 'Homozygous for HLA-A -- not going to see any LOH here'
-    logger(msg)
-    howToWarn(msg)
-    hlaAlleles <- hlaAlleles[-grep('hla_a', x = hlaAlleles)]
+  homozygous_alleles <- c()
+  for (hla_gene in c('hla_a', 'hla_b', 'hla_c')) {
+    if (length(grep(hla_gene, hlaAlleles)) == 1) {
+      hla_gene_f <- gsub('_', '-', toupper(hla_gene))
+      msg <- glue('Homozygous for {hla_gene_f} -- not going to see any LOH here')
+      logger(msg)
+      howToWarn(msg)
+      homozygous_alleles <- 
+        c(homozygous_alleles, grep(hla_gene, hlaAlleles, value = T))
+    }
   }
-
-  if (length(grep('hla_b', x = hlaAlleles)) == 1) {
-    msg <- 'Homozygous for HLA-B -- not going to see any LOH here'
-    logger(msg)
-    howToWarn(msg)
-    hlaAlleles <- hlaAlleles[-grep('hla_b', x = hlaAlleles)]
-  }
-
-  if (length(grep('hla_c', x = hlaAlleles)) == 1) {
-    msg <- 'Homozygous for HLA-C -- not going to see any LOH here'
-    logger(msg)
-    howToWarn(msg)
-    hlaAlleles <- hlaAlleles[-grep('hla_c', x = hlaAlleles)]
-  }
+  hlaAlleles <- setdiff(hlaAlleles, homozygous_alleles)
 
   if (length(hlaAlleles) == 0) {
     ## Turn mapping of because there's nothing to map anyway
@@ -1186,6 +1178,16 @@ run_LOHHLA <- function(opt) {
     hlas <- c('hla_a', 'hla_b', 'hla_c')
     HLAoutPut_l <- purrr::map(hlas, function(HLA_gene) {
       HLA_As <- grep(HLA_gene, hlaAlleles, value = TRUE)
+      if (any(grepl(HLA_gene, homozygous_alleles))) {
+        HLA_As <- grep(HLA_gene, homozygous_alleles, value = T)
+        return(list(message =
+            glue('{error_msg}homozygous_alleles_not_implemented;'),
+            HLA_A_type1 = repl_NA(HLA_As),
+            HLA_A_type2 = repl_NA(HLA_As)))
+      } else if (length(HLA_As) == 0) {
+        return(list(message = glue('{error_msg}no_recognized_alleles;')))
+      }
+
       ## Change this to a test of whether coverage files are present
       if (!coverageStep) {
         return(list(message = glue::glue('{error_msg}did_not_perform_coverage;'),
@@ -1204,15 +1206,6 @@ run_LOHHLA <- function(opt) {
           cmd <- sprintf('rm %s', region_HLA_plot_data)
           logger(cmd)
           system(cmd)
-        }
-
-        if (length(HLA_As) == 1) {
-          return(list(message =
-              glue('{error_msg}homozygous_alleles_not_implemented;'),
-              HLA_A_type1 = repl_NA(HLA_As[1]),
-              HLA_A_type2 = repl_NA(HLA_As[2])))
-        } else if (length(HLA_As) == 0) {
-          return(list(message = glue('{error_msg}no_recognized_alleles;')))
         }
         HLA_A_type1 <- HLA_As[1]
         HLA_A_type2 <- HLA_As[2]
@@ -3047,7 +3040,7 @@ run_LOHHLA <- function(opt) {
     logger(cmd)
     system(cmd)
 
-    cmd <- paste('rm 0r ', workDir, '/', '*normal*', sep = '')
+    cmd <- paste('rm -r ', workDir, '/', '*normal*', sep = '')
     logger(cmd)
     system(cmd)
 
