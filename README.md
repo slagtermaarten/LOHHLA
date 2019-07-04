@@ -3,6 +3,33 @@ Netherlands Cancer Institute. Edits are intended to facilitate usage and interpr
 the program and make it more robust to various problems, while keeping the core 
 functionality intact.
 
+Currently, the major additions include:
+
+* GRCh38 support. Do check your reference genome for presence of any additional 
+  alternative HLA sequences that are not hard-coded in the source code and please let me 
+  know if you find any. Perhaps these should be made user-definable.
+* Removed the silent assumption of paired-end sequencing data, single-end sequencing is 
+  now also supported
+* General usability, e.g. the ability to explicitly define the tumor and matched normal 
+  `.bam` files.  The original currently expects as input a folder with exactly two `.bam` 
+  files: the user defines the normal bam and the script infers that the other one must be 
+  the tumor bam, I decided to to change this. The user can define both the normal and 
+  tumor bams, allowing any kind of source file organization.
+* More error checks and robustness -- although there's probably still room for improvement 
+  here
+* More informative tabular output. The added 'message' column will display why certain 
+  alleles may have failed, so you don¿t necessarily have to go through the log files in 
+  case a sample/allele fails (due to e.g. homozygosity or lack of coverage in the matched 
+  normal bam)
+* Solved some potential numerical problems in the code, e.g. I encountered a division 
+  between two vectors of potentially unequal sizes, which lead to an error for some 
+  samples
+* Code readability and organization
+* Some additional dependencies were included
+
+A thank you goes out to Joris van der Haar for spotting some bugs I introduced.
+Tested and developed in R 3.5 on Linux.
+
 # README #
 
 Immune evasion is a hallmark of cancer. Losing the ability to present productive tumor 
