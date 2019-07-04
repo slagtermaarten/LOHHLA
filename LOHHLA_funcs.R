@@ -2244,7 +2244,11 @@ run_LOHHLA <- function(opt) {
         LossAllele <- ifelse(HLAtype1Log2MedianCoverageAtSites <
             HLAtype2Log2MedianCoverageAtSites, 1, 2) %>%
           { c(HLA_A_type1, HLA_A_type2)[.] }
-        KeptAllele <- setdiff(c(HLA_A_type1, HLA_A_type2), LossAllele)
+        if (length(LossAllele) == 1) {
+          KeptAllele <- setdiff(c(HLA_A_type1, HLA_A_type2), LossAllele)
+        } else {
+          KeptAllele <- NA
+        }
         numMisMatchSitesCov <- which(rowSums(misMatchCoveredInBoth) == 2) %>%
           length
         propSupportiveSites <-
