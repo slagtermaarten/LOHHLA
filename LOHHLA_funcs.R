@@ -1194,7 +1194,6 @@ run_LOHHLA <- function(opt) {
             HLA_A_type1 = repl_NA(HLA_As[1]),
             HLA_A_type2 = repl_NA(HLA_As[2])))
       } else {
-        if (F && HLA_gene == 'hla_c') browser()
         logger(sprintf('analyzing coverage differences in sample: %s, hla: %s',
             sample, HLA_gene))
 
@@ -1240,6 +1239,8 @@ run_LOHHLA <- function(opt) {
           warning(msg)
         }
 
+        if (F && HLA_gene == 'hla_c') browser()
+        if (F && HLA_gene == 'hla_b') browser()
         HLA_A_type1normalLoc <- grep(pattern = HLA_A_type1,
           x = list.files(workDir, pattern = 'normal\\.mpileup$',
             full.names = TRUE), value = TRUE)
@@ -1255,7 +1256,8 @@ run_LOHHLA <- function(opt) {
           msg <- sprintf('No coverage in normal sample, aborting %s', HLA_gene)
           howToWarn(msg)
           logger(msg)
-          return(list(message = glue('{error_msg}no_pileup_for_normal'),
+          return(list(
+              message = glue('{error_msg}no_pileup_for_normal'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1266,7 +1268,8 @@ run_LOHHLA <- function(opt) {
             error = function(e) { logger(
               glue::glue('Could not access {HLA_A_type1normalLoc}')) })
           if (is.null(HLA_A_type1normal)) {
-            return(list(message = glue('{error_msg}no_pileup_for_normal_{HLA_gene}_1'),
+            return(list(
+                message = glue('{error_msg}no_pileup_for_normal_{HLA_gene}_1'),
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
@@ -1276,7 +1279,8 @@ run_LOHHLA <- function(opt) {
             error = function(e) { logger(
               glue::glue('Could not access {HLA_A_type2normalLoc}')) })
           if (is.null(HLA_A_type2normal)) {
-            return(list(message = glue('{error_msg}no_pileup_for_normal_{HLA_gene}_2'),
+            return(list(
+                message = glue('{error_msg}no_pileup_for_normal_{HLA_gene}_2'),
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
@@ -1312,7 +1316,8 @@ run_LOHHLA <- function(opt) {
             quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
           error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type1tumor)) {
-          return(list(message = glue('{error_msg}no_pileup_for_tumor_{HLA_gene}_1'),
+          return(list(
+              message = glue('{error_msg}no_pileup_for_tumor_{HLA_gene}_1'),
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
@@ -1340,11 +1345,11 @@ run_LOHHLA <- function(opt) {
         HLA_A_type1normalCov <- HLA_A_type1normal$V4
         names(HLA_A_type1normalCov) <- HLA_A_type1normal$V2
         HLA_A_type1normalCov <-
-          HLA_A_type1normalCov[HLA_A_type1tumor$mm_position]
+          HLA_A_type1normalCov[as.character(HLA_A_type1tumor$mm_position)]
 
         HLA_A_type1tumorCov <- rep(0, length(HLA_A_type1normalCov))
         names(HLA_A_type1tumorCov) <- names(HLA_A_type1normalCov)
-        HLA_A_type1tumorCov[HLA_A_type1tumor$mm_position] <- HLA_A_type1tumor$V4
+        HLA_A_type1tumorCov[as.character(HLA_A_type1tumor$mm_position)] <- HLA_A_type1tumor$V4
         ## }}} Type 1
 
         ## Type 2 {{{
@@ -1380,11 +1385,12 @@ run_LOHHLA <- function(opt) {
         HLA_A_type2normalCov <- HLA_A_type2normal$V4
         names(HLA_A_type2normalCov) <- HLA_A_type2normal$V2
         HLA_A_type2normalCov <-
-          HLA_A_type2normalCov[HLA_A_type2tumor$mm_position]
+          HLA_A_type2normalCov[as.character(HLA_A_type2tumor$mm_position)]
 
         HLA_A_type2tumorCov <- rep(0, length(HLA_A_type2normalCov))
         names(HLA_A_type2tumorCov) <- names(HLA_A_type2normalCov)
-        HLA_A_type2tumorCov[HLA_A_type2tumor$mm_position] <- HLA_A_type2tumor$V4
+        HLA_A_type2tumorCov[as.character(HLA_A_type2tumor$mm_position)] <- 
+          HLA_A_type2tumor$V4
         ## }}} Type 2
 
         ## catch issues with HLA coverage
@@ -1395,8 +1401,8 @@ run_LOHHLA <- function(opt) {
 
         if (nrow(HLA_A_type1normal) == 0 || nrow(HLA_A_type2normal) == 0 ||
           HLA_type1_ok == 0 || HLA_type2_ok == 0) {
-          msg <- glue::glue('No position has greater than minimum \\
-            coverage filter for {HLA_gene}')
+          msg <- glue::glue('No position in normal sample has greater than \\
+            minimum coverage filter for {HLA_gene}')
           logger(msg)
           return(list(message =
               glue('{error_msg}no_position_sufficiently_covered_in_normal'),
@@ -1596,7 +1602,7 @@ run_LOHHLA <- function(opt) {
             ## }}} Type 1
             ## {{{ Type 2
             HLA_type2normal_nomissmatch <-
-              data.frame(cbind(HLA_A_type2, 2:length(HLA_type2Fasta),
+              data.frame(cbind(HLA_A_type2, 1:length(HLA_type2Fasta),
                   toupper(HLA_type2Fasta), minCoverageFilter + 2),
                 stringsAsFactors = FALSE)
             HLA_type2normal_nomissmatch$V4 <-
@@ -3025,7 +3031,7 @@ run_LOHHLA <- function(opt) {
   fdate <- format(Sys.time(), '%Y%m%d')
   HLAoutLoc <- paste(workDir, '/', patientId, '.',
     minCoverageFilter, '.DNA.HLAlossPrediction_CI.', fdate, fnExt, '.tsv', sep = '')
-  write_tsv(HLAoutPut, HLAoutLoc)
+  write_tsv(unique(HLAoutPut), HLAoutLoc)
 
   ## Remove redundant rows from output
   # system(glue::glue('grep -v \'^TRUE\' {HLAoutLoc} | sort | uniq | \\
