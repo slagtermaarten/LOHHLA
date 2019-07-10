@@ -412,7 +412,7 @@ getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
       sample <- unlist(strsplit(BAM, split = '/')) %>% { .[length(.)] }
       flagstat <- paste0(outDir, sample, '.proc.flagstat')
       cmd <- paste0(samtools, ' flagstat ', BAM, ' > ', flagstat)
-      if (file.exists(flagstat)) {
+      if (!forceRedo && file.exists(flagstat)) {
         logger(flagstat, 'already exists, skipping')
       } else {
         system(cmd)
@@ -840,7 +840,9 @@ run_LOHHLA <- function(opt) {
       hlaBAMfile <- paste0(sample_dir, '/', BAMid, '.chr6region.patient',
         '.reference.hlas.csorted.noduplicates.filtered.bam')
 
-      if (length(alt_loci_names) > 0) {
+      if (length(alt_loci_names) == 0) {
+        logger(glue('No alternate sequences to retrieve additional ', 
+            'reads from {BAMid}'))
         ## Add reads mapped to alternate loci to fished file
         for (chrom_name in alt_loci_names) {
           samtoolsCMD <- paste0(samtools, ' view ', BAMfile_full,
@@ -865,7 +867,16 @@ run_LOHHLA <- function(opt) {
         # ' INCLUDE_NON_PRIMARY_ALIGNMENTS=false',
         ' VALIDATION_STRINGENCY=SILENT', sep = '')
       logger(samToFastQ)
-      system(samToFastQ)
+      samToFastQ_output <- system(samToFastQ, intern = T)
+      if (is.null(samToFastQ_output) || 
+          is.null(attr(samToFastQ_output, 'status')) ||
+          #length(samToFastQ_output) > 0 && 
+          attr(samToFastQ_output, 'status') == 1) {
+        logger(glue('samToFastq failed for sample {BAMid}. ', 
+            'In order to identify the problem, please manually rerun\n',
+            '{samToFastQ}'))
+      }
+
       logger(sprintf('Sam_file read count: %d, chr6.f1: %d, chr6.f2: %d', 
         tryCatch(length(readLines(sam_file)), error = function(e) { 0 }),
         tryCatch(length(readLines(chr6.f1)), error = function(e) { 0 }), 
@@ -1101,7 +1112,7 @@ run_LOHHLA <- function(opt) {
         cmd <- paste(samtools, ' mpileup ', sample_dir, '/', BAMfile, ' -f ',
                      HLAfastaLoc, ' > ', mpileupFile, sep = '')
 
-        if (file.exists(mpileupFile)) {
+        if (!forceRedo && file.exists(mpileupFile)) {
           logger(paste(mpileupFile, 'already exists, skipping.'))
         } else {
           logger(cmd)
