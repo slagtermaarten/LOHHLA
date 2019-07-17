@@ -1284,6 +1284,12 @@ run_LOHHLA <- function(opt) {
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
+          HLA_A_type1normal$V4 <- as.numeric(HLA_A_type1normal$V4)
+          HLA_A_type1normal$mm_position <- as.character(HLA_A_type1normal$V2)
+          ## Apply minimum coverage thresholds
+          HLA_A_type1normal <-
+            HLA_A_type1normal[HLA_A_type1normal$V4 > minCoverageFilter,
+            , drop = FALSE]
 
           HLA_A_type2normal <- tryCatch(read.table(HLA_A_type2normalLoc,
             sep = '\t', stringsAsFactors = FALSE, quote = '', fill = TRUE),
@@ -1295,6 +1301,12 @@ run_LOHHLA <- function(opt) {
                 HLA_A_type1 = HLA_A_type1,
                 HLA_A_type2 = HLA_A_type2))
           }
+          HLA_A_type2normal$V4 <- as.numeric(HLA_A_type2normal$V4)
+          HLA_A_type2normal$mm_position <- as.character(HLA_A_type2normal$V2)
+          ## Apply minimum coverage thresholds
+          HLA_A_type2normal <-
+            HLA_A_type2normal[HLA_A_type2normal$V4 > minCoverageFilter,
+            , drop = FALSE]
         } else {
           ## {{{ Type 1
           HLA_A_type1normal <- data.frame(
@@ -1303,7 +1315,6 @@ run_LOHHLA <- function(opt) {
             stringsAsFactors = FALSE)
           colnames(HLA_A_type1normal) <-
             paste('V', 1:ncol(HLA_A_type1normal), sep = '')
-          HLA_A_type1normal$V4 <- as.numeric(HLA_A_type1normal$V4)
           ## }}} Type 1
           ## {{{ Type 2
           HLA_A_type2normal <- data.frame(
@@ -1312,14 +1323,10 @@ run_LOHHLA <- function(opt) {
             stringsAsFactors = FALSE)
           colnames(HLA_A_type2normal) <-
             paste('V', 1:ncol(HLA_A_type2normal), sep = '')
-          HLA_A_type2normal$V4 <- as.numeric(HLA_A_type2normal$V4)
           ## }}} Type 2
         }
 
-        ## 2019-04-04 11:35 M.S. Rownames might not be unique, using the
-        ## rownames attribute is therefore unsafe
         ## Type 1 {{{
-        HLA_A_type1normal$mm_position <- as.character(HLA_A_type1normal$V2)
         tumpile <- paste0(workDir, '/', sample, '.',
           HLA_A_type1, '.', 'tumor.mpileup')
         HLA_A_type1tumor <- tryCatch(
@@ -1332,74 +1339,66 @@ run_LOHHLA <- function(opt) {
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
-
+        HLA_A_type1tumor$V4 <- as.numeric(HLA_A_type1tumor$V4)
         HLA_A_type1tumor$mm_position <- HLA_A_type1tumor$V2
-        ## Apply minimum coverage thresholds (we only apply this to the normal
-        ## for now)
-        HLA_A_type1normal <-
-          HLA_A_type1normal[HLA_A_type1normal$V4 > minCoverageFilter,
-          , drop = FALSE]
+
         ## Select loci for which coverage info is available for both tumor and
         ## matched normal
         tmp <- intersect(HLA_A_type1tumor$mm_position,
           HLA_A_type1normal$mm_position)
         HLA_A_type1normal <-
-          HLA_A_type1normal[HLA_A_type1normal$mm_position %in% tmp, , drop = FALSE] %>% unique
-        # HLA_A_type1normal[duplicated(HLA_A_type1normal$mm_position), ]
-        # HLA_A_type1normal[HLA_A_type1normal$mm_position == '220', ]
-        # HLA_A_type1normal[HLA_A_type1normal$mm_position == '247', ]
-        # HLA_A_type1tumor[HLA_A_type1tumor$mm_position == '247', ]
-
+          HLA_A_type1normal[HLA_A_type1normal$mm_position %in% tmp, 
+          , drop = FALSE] %>% unique
         HLA_A_type1tumor <-
-          HLA_A_type1tumor[HLA_A_type1tumor$mm_position %in% tmp, , drop = FALSE] %>% unique
+          HLA_A_type1tumor[HLA_A_type1tumor$mm_position %in% tmp, 
+          , drop = FALSE] %>% unique
 
-        HLA_A_type1normalCov <- HLA_A_type1normal$V4
-        names(HLA_A_type1normalCov) <- HLA_A_type1normal$V2
+        HLA_A_type1normalCov <- setNames(
+          HLA_A_type1normal$V4, HLA_A_type1normal$V2)
         HLA_A_type1normalCov <-
           HLA_A_type1normalCov[as.character(HLA_A_type1tumor$mm_position)]
 
-        HLA_A_type1tumorCov <- rep(0, length(HLA_A_type1normalCov))
-        names(HLA_A_type1tumorCov) <- names(HLA_A_type1normalCov)
-        HLA_A_type1tumorCov[as.character(HLA_A_type1tumor$mm_position)] <- HLA_A_type1tumor$V4
+        HLA_A_type1tumorCov <- setNames(rep(0, length(HLA_A_type1normalCov)),
+          names(HLA_A_type1normalCov))
+        HLA_A_type1tumorCov[as.character(HLA_A_type1tumor$mm_position)] <- 
+          HLA_A_type1tumor$V4
         ## }}} Type 1
 
         ## Type 2 {{{
-        HLA_A_type2normal$mm_position <- as.character(HLA_A_type2normal$V2)
-        tumpile <- paste0(workDir, '/', sample, '.', HLA_A_type2,
-          '.', 'tumor.mpileup')
+        tumpile <- paste0(workDir, '/', sample, '.',
+          HLA_A_type2, '.', 'tumor.mpileup')
         HLA_A_type2tumor <- tryCatch(
           read.table(tumpile, sep = '\t', stringsAsFactors = FALSE,
             quote = '', fill = TRUE, col.names = paste0('V', c(1:6))),
           error = function(e) { print(e); NULL })
         if (is.null(HLA_A_type2tumor)) {
-          return(list(message = glue('{error_msg}no_pileup_for_tumor_{HLA_gene}_2'),
-              HLA_A_type2 = HLA_A_type2,
+          return(list(
+              message = glue('{error_msg}no_pileup_for_tumor_{HLA_gene}_2'),
+              HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
-
+        HLA_A_type2tumor$V4 <- as.numeric(HLA_A_type2tumor$V4)
         HLA_A_type2tumor$mm_position <- HLA_A_type2tumor$V2
-        # if (F && HLA_gene == 'hla_b') browser()
-        ## Apply minimum coverage thresholds (we only apply this to the normal
-        ## for now)
-        HLA_A_type2normal <-
-          HLA_A_type2normal[HLA_A_type2normal$V4 > minCoverageFilter,
-          , drop = FALSE]
+
         ## Select loci for which coverage info is available for both tumor and
         ## matched normal
-        tmp <- intersect(HLA_A_type2tumor$mm_position,
+        tmp <- intersect(
+          HLA_A_type2tumor$mm_position,
           HLA_A_type2normal$mm_position)
         HLA_A_type2normal <-
-          HLA_A_type2normal[HLA_A_type2normal$mm_position %in% tmp, , drop = FALSE] %>% unique
+          HLA_A_type2normal[HLA_A_type2normal$mm_position %in% tmp, 
+          , drop = FALSE] %>% unique
         HLA_A_type2tumor <-
-          HLA_A_type2tumor[HLA_A_type2tumor$mm_position %in% tmp, , drop = FALSE] %>% unique
+          HLA_A_type2tumor[HLA_A_type2tumor$mm_position %in% tmp, 
+          , drop = FALSE] %>% unique
 
-        HLA_A_type2normalCov <- HLA_A_type2normal$V4
-        names(HLA_A_type2normalCov) <- HLA_A_type2normal$V2
+        HLA_A_type2normalCov <- setNames(
+          HLA_A_type2normal$V4, HLA_A_type2normal$V2)
         HLA_A_type2normalCov <-
           HLA_A_type2normalCov[as.character(HLA_A_type2tumor$mm_position)]
 
-        HLA_A_type2tumorCov <- rep(0, length(HLA_A_type2normalCov))
-        names(HLA_A_type2tumorCov) <- names(HLA_A_type2normalCov)
+        HLA_A_type2tumorCov <- setNames(rep(0, length(HLA_A_type2normalCov)),
+          names(HLA_A_type2normalCov))
         HLA_A_type2tumorCov[as.character(HLA_A_type2tumor$mm_position)] <- 
           HLA_A_type2tumor$V4
         ## }}} Type 2
@@ -1431,6 +1430,7 @@ run_LOHHLA <- function(opt) {
               HLA_A_type1 = HLA_A_type1,
               HLA_A_type2 = HLA_A_type2))
         }
+
         if (HLA_type2_ok / HLA_type1_ok < 0.05) {
           msg <- paste('Check that the HLA type is correct for ',
             HLA_A_type2, '!', sep = '')
