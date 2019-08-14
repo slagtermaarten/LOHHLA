@@ -10,6 +10,14 @@ Currently, the major additions include:
   know if you find any. Perhaps these should be made user-definable.
 * Removed the silent assumption of paired-end sequencing data, single-end sequencing is 
   now also supported
+* Included the ability to run LOHHLA on partial/sliced bam files, which only or at least 
+  include the HLA region of chromosome 6, by allowing the user to input the number of 
+  mapped reads for the tumor and normal `.bam` files. These two quantities are essential 
+  to correctly compare the coverage between the two samples. I myself have used this 
+  feature in combination with the TCGA bam slicing tool in order to estimate HLA LOH for 
+  TCGA samples without having to download the entire `.bam` files for each patient.  For 
+  this analysis, I estimated the total mapped reads using the file size of the `.bam` 
+  file, which is directly accessible via TCGA .
 * General usability, e.g. the ability to explicitly define the tumor and matched normal 
   `.bam` files.  The original currently expects as input a folder with exactly two `.bam` 
   files: the user defines the normal bam and the script infers that the other one must be 
@@ -26,8 +34,12 @@ Currently, the major additions include:
   samples
 * Code readability and organization
 * Some additional dependencies were included
+* Plotting code has been minimally altered and remains untested in conjunction with the 
+  rest of this codebase
 
-A thank you goes out to Joris van der Haar for spotting some bugs I introduced.
+
+A thank you goes out to Joris van der Haar for spotting some bugs I (Maarten Slagter) 
+introduced.
 Tested and developed in R 3.5 on Linux.
 
 # README #
@@ -92,80 +104,14 @@ LOHHLA is coded in R, and can be executed from the command line (Terminal, in
 Linux/UNIX/OSX, or Command Prompt in MS Windows) directly, or using a shell script (see 
 example below).
 
-Running LOHHLA with no arguments prints the usage information. 
+USAGE: 
 
-USAGE: Rscript /location/of/LOHHLA/script  [OPTIONS]
+    Rscript /location/of/LOHHLA/script  [OPTIONS]
 
-OPTIONS:
+For a description of all the options, run: 
 
-	-id CHARACTER, --patientId=CHARACTER
-		patient ID
+    Rscript /location/of/LOHHLA/script --help
 
-	-o CHARACTER, --outputDir=CHARACTER
-		location of output directory
-
-	-nBAM CHARACTER, --normalBAMfile=CHARACTER
-		normal BAM file
-		can be FALSE to run without normal sample
-
-  -tBAM CHARACTER, --tumorBAMfile=CHARACTER
-    tumor BAM file
-
-	-BAM CHARACTER, --BAMDir=CHARACTER
-		location of all BAMs to test
-
-	-hla CHARACTER, --hlaPath=CHARACTER
-		location to patient HLA calls
-
-	-hlaLoc CHARACTER, --HLAfastaLoc=CHARACTER
-		location of HLA FASTA [default=~/lohhla/data/hla_all.fasta]
-
-	-cn CHARACTER, --CopyNumLoc=CHARACTER
-		location to patient purity and ploidy output
-		can be FALSE to only estimate allelic imbalance
-
-	-ov CHARACTER, --overrideDir=CHARACTER
-		location of flagstat information if already run [default= FALSE]
-
-	-mc CHARACTER, --minCoverageFilter=CHARACTER
-		minimum coverage at mismatch site [default= 30]
-
-	-kmer CHARACTER, --kmerSize=CHARACTER
-		size of kmers to fish with [default= 50]
-
-	-mm CHARACTER, --numMisMatch=CHARACTER
-		number of mismatches allowed in read to map to HLA allele [default= 1]
-
-	-ms CHARACTER, --mappingStep=CHARACTER
-		does mapping to HLA alleles need to be done [default= TRUE]
-
-	-fs CHARACTER, --fishingStep=CHARACTER
-		if mapping is performed, also look for fished reads matching kmers of size kmerSize [default= TRUE]
-
-	-ps CHARACTER, --plottingStep=CHARACTER
-		are plots made [default= TRUE]
-
-	-cs CHARACTER, --coverageStep=CHARACTER
-		are coverage differences analyzed [default= TRUE]
-
-	-cu CHARACTER, --cleanUp=CHARACTER
-		remove temporary files [default= TRUE]
-
-	-no CHARACTER, --novoDir=CHARACTER
-		path to novoalign executable [default= ]
-
-	-ga CHARACTER, --gatkDir=CHARACTER
-		path to GATK executable [default= ]
-
-	-ex CHARACTER, --HLAexonLoc=CHARACTER
-		HLA exon boundaries for plotting [default=~/lohhla/data/hla.dat]
-
-	-w CHARACTER, --ignoreWarnings=CHARACTER
-		continue running with warnings [default= TRUE]
-
-  -h, --help
-		Show this help message and exit            
- 
 
 ### What is the output of LOHHLA? ###
 
