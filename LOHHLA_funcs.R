@@ -404,7 +404,8 @@ getMisMatchPositionsPairwiseAlignment <- function(alignment,
 
 
 getUniqMapReads <- function(workDir, BAMDir, override = FALSE,
-  tumorBAMfile, normalBAMfile, overrideDir = NULL, samtools) {
+                            tumorBAMfile, normalBAMfile, 
+                            overrideDir = NULL, samtools, forceRedo = F) {
   if (!override) {
     outDir <- paste(workDir, '/flagstat/', sep = '')
     if (!file.exists(outDir)) {
@@ -514,8 +515,6 @@ getHlaExons <- function(allele, pickAllele = 'all', HLAexonLoc = '') {
   }
   return(list(hlaExons, exonTable))
 }
-
-
 
 
 #' Get base name of file and reduce it to everything leading up to first dot
@@ -1154,12 +1153,17 @@ run_LOHHLA <- function(opt) {
     if (!override) {
       sample_uniq_mapped_reads <-
         getUniqMapReads(workDir = workDir, BAMDir = BAMDir,
-          tumorBAMfile = tumorBAMfile, normalBAMfile = normalBAMfile,
-          override = FALSE, samtools = samtools)
+                        tumorBAMfile = tumorBAMfile, 
+                        normalBAMfile = normalBAMfile,
+                        override = FALSE, samtools = samtools,
+                        forceRedo = forceRedo)
     } else {
-      sample_uniq_mapped_reads <- getUniqMapReads(workDir = workDir,
-        BAMDir = BAMDir, override = TRUE, overrideDir = overrideDir, 
-        samtools = samtools)
+      sample_uniq_mapped_reads <- 
+        getUniqMapReads(workDir = workDir,
+                        BAMDir = BAMDir, override = TRUE, 
+                        forceRedo = forceRedo,
+                        overrideDir = overrideDir, 
+                        samtools = samtools)
     }
 
     ## In case of multiple normal samples, reduce to the best normal sample
