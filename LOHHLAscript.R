@@ -59,7 +59,7 @@ option_list = list(
               help="HLA exon boundaries for plotting [default= %default]", metavar="character"),
   make_option(c("--ignoreWarnings"), type="logical", default=TRUE,
               help="continue running with warnings [default= %default]", metavar="character"),
-  make_option(c("--genomeAssembly"), type="character", default='grch38',
+  make_option(c("--genomeAssembly"), type="character", default='hg19',
               help="specify genome assembly (hg19 or grch38) [default= %default]", metavar="character"),
   make_option(c("--jellyFish"), type="character", default='jellyfish',
               help="specify location of jellyfish binary", metavar="character"),
@@ -74,6 +74,14 @@ option_list = list(
               metavar='character'),
   make_option(c('--requirePairedReads'), type='logical', default=TRUE,
               help='whether to require reads to paired, ignored if single-end sequencing is detected', 
+              metavar='character'),
+  make_option(c('--adaptBinSize'), type='logical', default=TRUE,
+              help='whether to adapt bin size to the amount of mismatch sites to
+              evaluate CN ratios over, not included in original LOHHLA', 
+              metavar='character'),
+  make_option(c('--checkIndices'), type='logical', default=TRUE,
+              help='whether to restrict allelic coverage comparison to sites
+              that are covered in both samples, not included in original LOHHLA', 
               metavar='character')
 )
 
@@ -84,7 +92,7 @@ opt <- parse_args(opt_parser)
 if (!dir.exists(opt$LOHHLA_loc)) {
   stop('LOHHLA_loc command line argument seems to be incorrect')
 }
-source(file.path(opt$LOHHLA_loc, 'LOHHLA_funcs.R'))
+source(file.path(opt$LOHHLA_loc, 'functions.R'))
 
 # strip trailing / from all parameters in opt
 for (i in 1:length(opt)) {

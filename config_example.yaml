@@ -1,0 +1,4 @@
+novoDir: '~/conda/bin'
+gatkDir: '~/picard-tools-1.120'
+jellyFish: '~/conda/bin/jellyfish'
+LOHHLA_dir: '~/libs/LOHHLA'
