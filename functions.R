@@ -586,7 +586,7 @@ run_LOHHLA <- function(opt) {
   stopifnot(file.exists(HLAfastaLoc))
   CopyNumLoc <- opt$CopyNumLoc
   stopifnot(file.exists(CopyNumLoc))
-  overrideDir <- opt$overrideDir %||% FALSE
+  overrideDir <- opt$overrideDir %||% 'FALSE'
   minCoverageFilter <- opt$minCoverageFilter %||% 10
   numMisMatch <- opt$numMisMatch %||% 1
   mappingStep <- opt$mappingStep %||% TRUE
@@ -641,7 +641,7 @@ run_LOHHLA <- function(opt) {
     performIntegerCopyNum <- FALSE
     useLogRbin <- FALSE
   }
-  override <- ifelse(!overrideDir || 
+  override <- ifelse(!as.logical(overrideDir) || 
                      grepl('fals', overrideDir, ignore.case = T), 
                      yes = FALSE, no = TRUE)
   gamma <- 1
@@ -663,9 +663,10 @@ run_LOHHLA <- function(opt) {
   }
 
   params <- list(patientId, workDir, hlaPath, normalBAMfile, tumorBAMfile,
-    BAMDir, HLAfastaLoc, CopyNumLoc, gatkDir, novoDir)
+                 BAMDir, HLAfastaLoc, CopyNumLoc, gatkDir, novoDir)
   names(params) <- c('patientId', 'workDir', 'hlaPath', 'normalBAMfile',
-    'tumorBAMfile', 'BAMDir', 'HLAfastaLoc', 'CopyNumLoc', 'gatkDir', 'novoDir')
+                     'tumorBAMfile', 'BAMDir', 'HLAfastaLoc', 'CopyNumLoc', 
+                     'gatkDir', 'novoDir')
   document_params(params, log_fn)
 
   BAMfiles <- c(basename(tumorBAMfile), basename(normalBAMfile))
