@@ -283,7 +283,7 @@ combine.fastqs <- function(chr6, fished) {
     ## Combine with chr6 reads
     if (!is.null(chr6.seq) && is.data.frame(chr6.seq) && nrow(chr6.seq) > 0) {
       ## Ensure that reads aren't already included due to multi-mapping
-      fished.names.nodup <- fished.names[-which(fished.names %in% chr6.seq$V1)]
+      fished.names.nodup <- fished.names[!(fished.names %in% chr6.seq$V1)]
     } else {
       fished.names.nodup <- fished.names
     }
